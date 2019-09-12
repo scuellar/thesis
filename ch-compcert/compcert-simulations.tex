@@ -1,0 +1,127 @@
+\section{More revealing simulations}\label{sec:compcert-sim}
+
+\begin{table}\centering
+
+$\begin{array}{rc}
+\forall s_1 \ t \ s_1' \ f.  \ s1 \xrightarrow{t} s1' & \rightarrow \\
+  \forall i \ s_2, \ s_1 \overset{f, i}{\sim} s_2 &\rightarrow \\
+          \exists i' \ s_2' \ f' \ t', & \\
+          (s_2 \xrightarrow{t'}^+ s_2') \vee (s_2 \xrightarrow{t'}^* s_2' /\ i' \leq i)) & \wedge\\
+          s_1 \overset{f', i'}{\sim} s_2 & \wedge \\
+          f \sqsubseteq f'  & \wedge \\
+           \text{inject\_trace\_strong} \ f' \ t \ t'
+
+
+\end{array}$
+
+\caption{Step simulation step diagram}\label{sec:step_diagram_sim}
+\end{table}
+
+
+We extend CompCert simulations in several ways:
+
+\begin{itemize}
+\item Expose the injection, use \Coqcode{get_mem} to show that the memories are either related by an injection, an extension or are equal. We provide three types of simulations for injections, extensions and equalities named \Coqcode{eq_sim}, \Coqcode{extend_sim} and \Coqcode{inject_sim} respectively. They all compose to injections as shown by the composition lemmas \ref{lemma:eq_extend}, \ref{lemma:extend_inj} and \ref{lemma:inj_inj}:
+\begin{table}\centering
+\begin{lstlisting}[style=CoqTheorem-list]
+fsim_simulation:
+          forall s1 t s1' f, Step L1 s1 t s1' ->
+           forall i s2, match_states i f s1 s2 ->
+          exists i', exists s2' f' t',
+          (Plus L2 s2 t' s2' \/ (Star L2 s2 t' s2' /\ i' \leq i))
+          match_states i' f' s1' s2' /\
+          inject_incr f f' /\
+           inject_trace_strong f' t t'
+  \end{lstlisting}
+\caption{The new simulation step diagram}\label{code:sec:step_diagram_sim}
+\end{table}
+
+\begin{lemma}\label{lemma:eq_extend}
+For all semantics $L_1$ and $L_2$ if \Coqcode{eq_sim} $L_1 \ L_2$ then \Coqcode{extend_sim} $L_1 \ L_2$\end{lemma} 
+\begin{lemma}\label{lemma:extend_inj}
+For all semantics $L_1, L_2, L_3$, if \Coqcode{extend_sim} $L_1 \ L_2$ and \Coqcode{inject_sim} $L_2 \ L_3$, then \Coqcode{inject_sim} $L_1 \ L_3$
+\end{lemma} 
+\begin{lemma}\label{lemma:inj_inj}
+For all semantics $L_1, L_2, L_3$, if \Coqcode{inject_sim} $L_1 \ L_2$ and \Coqcode{inject_sim} $L_2 \ L_3$, then \Coqcode{inject_sim} $L_1 \ L_3$
+\end{lemma} 
+
+
+
+\item We also need to know that the compiler doesn't change the number of steps taken by external functions. This fact was already proven in the CompCert correctness proof but was hidden by a less expressive simulation, so we add it to the simulation as \Coqcode{simulation_atx}. The new fact says that if a source state, that is \Coqcode{at_external}, takes exactly one step then the matching target state does the same (as opposed to any number of steps), and the two resulting states match. From the match relation, we can also derive that if the resulting source state is in \Coqcode{after_external}, then so is the target one.
+
+This fact is crucial to go from thread-local simulation to full-program simulation, where we need to replace the "oracular" external steps by their real execution of the external function. 
+
+We further expand the notion of \Coqcode{simulation_atx} at the end of this subsection.
+
+
+
+\item We need to know that the compiler preserves external function calls. The original CompCert simulation only preserves traces so, for example, a compiler could replace an external function call with internal code that produces the same event. This is not what the compiler does, but the simulation proof does not rule it out.  We add \Coqcode{preserves_atx} to the simulation, which says that if a source state is \Coqcode{at_external}, then any target state it matches is also at external.  
+
+\end{itemize}
+
+It might be surprising that we don't change the the simulation diagram for \Coqcode{initial_state} (other than changing it to \Coqcode{entry_points}). In CompComp \cite{compcomp}, the initial core simulation must accept almost arbitrary (but injected) memories. Our technique allows us to assume that the the context is not compiled, and thus the initial memory is identical in source and target.
+
+Some readers might be surprise by the shape of \Coqcode{simulation_atx}; a simulation for external functions should be universally quantified, instead of existentially. That is, the simulation should accept any trace of the external world (up to injection) and not just one. CompCert can get away with this form because traces are identical in source and target, so only one trace needs to be accounted for.
+In our setting, traces are injected (\Coqcode{inject} $t_s$ $t_t$), and this relation is not 1-to-1 because an injection maps undefined values to any value. So, if we expect to use the compiler in a real context, we need to expand the definition of \Coqcode{simulation_atx} to universally quantify over traces, as done in figure \ref{fig:simulation_atxX}. Does this mean we need to change the proofs for all injection phases? No! The relations \Coqcode{simulation_atx} and \Coqcode{simulation_atxX} compose horizontally into \Coqcode{simulation_atxX}, as described in the lemma \Coqcode{injection_injection_relaxed_composition}. This means that we can prove CompCert with respect to \Coqcode{simulation_atx} and use the selfsimulation of Assembly (\ref{sec:selfsim}) to prove the stronger simulation. The composed simulation will result in \Coqcode{simulation_atxX} as desired. 
+
+\begin{table}\label{fig:simulation_atxX}
+\begin{lstlisting}
+Definition simulation_atx_inj_relaxed {index:Type} {L1 L2: semantics}
+               (match_states: index -> meminj -> state L1 -> state L2 -> Prop) :=
+          forall s1 f args,
+            at_external L1 s1 = Some (f,args) -> 
+            forall t s1' i f s2, Step L1 s1 t s1' ->
+                            match_states i f s1 s2 ->
+                            exists f', Values.inject_incr f f' /\
+                              (exists i' s2' t',
+                                  Step L2 s2 t' s2' /\
+                                  match_states i' f' s1' s2' /\
+                                  inject_trace_strong f' t t') /\
+                              forall t', inject_trace f' t t' ->
+                              		exists i', exists s2',
+                                    	Step L2 s2 t' s2' /\
+                                    	match_states i' f' s1' s2'.
+\end{lstlisting}
+Stronger simulation for external steps, that universally quantifies over all injected traces. 
+\end{table}
+\begin{table}
+\begin{lstlisting}
+	
+Lemma injection_injection_relaxed_composition:
+ forall (L1 L2 L3 : semantics),
+    fsim_properties_inj L1 L2->
+    fsim_properties_inj_relaxed L2 L3 ->
+    fsim_properties_inj_relaxed L1 L3.
+    
+\end{lstlisting}
+\caption{\Coqcode{fsim_properties_inj_relaxed} is identical to \Coqcode{fsim_properties_inj} except it uses \Coqcode{simulation_atxX} instead of \Coqcode{simulation_atx}.}
+\end{table}
+   
+   
+\subsubsection{Full injections} Most passes in CompCert preserve the contents in memory. Even injection passes, such as Cminorgen, Stacking and Inlining, only reorder memory and coalesce blocks, but don't remove any content from memory. Only two passes currently pull contents out of memory: SimplLocals, which pulls scalar variables whose address is not into temporary variables, and Unusedglob, which removes unused static globals. For those injection passes where memory content is preserved, we make that explicit by adding a predicate \Coqcode{full_injection}, that states that an injection maps all valid blocks in memory. In the remaining of this subsection, we explain the current limitations of the way CompCert specifies unmapped parts of memory. In our version of CompCert, a compiler that skips SimplLocals and Unusedglob, can expose \Coqcode{full_injection} and overcome those limitations. Certainly, requiring all memory to be mapped is also a strong limitation. We discuss solutions for this limitation in related work \ref{ch:relatedwork} and in our future work \ref{ch:futurework}.
+
+Consider the following possible system call that executes a \Ccode{write} in two steps: a first call to \Ccode{twostep_write_set_buffer(int fd, const void *buf, size_t nbytes)} records the arguments and a second call to \Ccode{twostep_write()} executes the write, which is equivalent to calling the \Ccode{write} system call with the arguments recorded in the first call. 
+
+Notice that  the safe execution of \Ccode{twostep_write()} depends on the buffer \Ccode{*buf} being still available in memory. Unfortunately, CompCert imposes requirements on external functions that rule this out. In particular, CompCert requires the external function to commute with memory injections (as described in \ref{code:ec_mem_inject}) with the only knowledge that memories are injected, arguments are injected and symbols are preserved. These conditions do not ensure that \Ccode{*buf} is in memory. Since \Ccode{*buf} is not in the arguments, it could be unmapped. Knowing that the injection is \Coqcode{full_injection}, is enough to know that \Ccode{*buf} is not unmapped. 
+
+\begin{table}\label{code:ec_mem_inject}\centering
+\begin{lstlisting}
+        forall ge1 ge2 vargs m1 t vres m2 f m1' vargs',
+          symbols_inject f ge1 ge2 ->
+          sem ge1 vargs m1 t vres m2 ->
+          Mem.inject f m1 m1' ->
+          Val.inject_list f vargs vargs' ->
+          exists f', exists vres', exists m2', exists t',
+                  sem ge2 vargs' m1' t' vres' m2'
+                  /\ Val.inject f' vres vres'
+                  /\ Mem.inject f' m2 m2'
+                  /\ Mem.unchanged_on (loc_unmapped f) m1 m2
+                  /\ Mem.unchanged_on (loc_out_of_reach f m1) m1' m2'
+                  /\ inject_incr f f'
+                  /\ inject_separated f f' m1 m1';
+    
+\end{lstlisting}
+\caption{This pradicate, labeled \Coqcode{ec_mem_inject}, is one of the properties required by CompCert.}
+\end{table}
+
+As a second example, consider shared memory concurrency. When two threads are interacting through memory, each thread needs to know that the memory it gains access to, is not unmapped and unchanged. We specify the memory used by a thread by the locations it has permissions over (which is a superset of the locations it access). This approach allows us to ensure that the memory doesn't change when other threads execute. Unfortunately, if part of the memory is unmapped, we can't ensure that the threads execute correctly. This problem is surprisingly close to the \Ccode{twostep_write()}  example, and many of the solutions for that problem will also solve the problem for concurrency. Temporarily, having \Coqcode{full_injection} allows for concurrency.

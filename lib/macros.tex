@@ -1,0 +1,239 @@
+%Copied from our LICS submission (taxonomy)
+
+%%%%%%%%%%%%%%
+%% Separation macros
+\newcommand{\wand}{{-  \mkern-6mu*}}
+\newcommand{\emp}{{\keyw{emp}}}
+
+%Compcertpermissions
+\newcommand{\Free}{{\keyw{Freeable}}}
+\newcommand{\Write}{{\keyw{Writable}}}
+\newcommand{\Read}{{\keyw{Readable}}}
+\newcommand{\Nempty}{{\keyw{Nonempty}}}
+\newcommand{\nonpos}{{\keyw{nonpos}}}
+%\newcommand{\None}{{\mathrm{None}}}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Rustan wants the letters in his math formulas to be spaced
+%% as in running italic text.  So we here redefine each letter,
+%% in its role as a MathSymbol, to come from the symbol font
+%% named "italics", rather than from the one named "letters".
+
+% The following line is needed to make this file work with certain
+% fonts, include the standard Computer Modern fonts.
+\DeclareSymbolFont{italics}{OT1}{cmr}{m}{it}
+
+\DeclareMathSymbol{a}{\mathalpha}{italics}{"61}
+\DeclareMathSymbol{b}{\mathalpha}{italics}{"62}
+\DeclareMathSymbol{c}{\mathalpha}{italics}{"63}
+\DeclareMathSymbol{d}{\mathalpha}{italics}{"64}
+\DeclareMathSymbol{e}{\mathalpha}{italics}{"65}
+\DeclareMathSymbol{f}{\mathalpha}{italics}{"66}
+\DeclareMathSymbol{g}{\mathalpha}{italics}{"67}
+\DeclareMathSymbol{h}{\mathalpha}{italics}{"68}
+\DeclareMathSymbol{i}{\mathalpha}{italics}{"69}
+\DeclareMathSymbol{j}{\mathalpha}{italics}{"6A}
+\DeclareMathSymbol{k}{\mathalpha}{italics}{"6B}
+\DeclareMathSymbol{l}{\mathalpha}{italics}{"6C}
+\DeclareMathSymbol{m}{\mathalpha}{italics}{"6D}
+\DeclareMathSymbol{n}{\mathalpha}{italics}{"6E}
+\DeclareMathSymbol{o}{\mathalpha}{italics}{"6F}
+\DeclareMathSymbol{p}{\mathalpha}{italics}{"70}
+\DeclareMathSymbol{q}{\mathalpha}{italics}{"71}
+\DeclareMathSymbol{r}{\mathalpha}{italics}{"72}
+\DeclareMathSymbol{s}{\mathalpha}{italics}{"73}
+\DeclareMathSymbol{t}{\mathalpha}{italics}{"74}
+\DeclareMathSymbol{u}{\mathalpha}{italics}{"75}
+\DeclareMathSymbol{v}{\mathalpha}{italics}{"76}
+\DeclareMathSymbol{w}{\mathalpha}{italics}{"77}
+\DeclareMathSymbol{x}{\mathalpha}{italics}{"78}
+\DeclareMathSymbol{y}{\mathalpha}{italics}{"79}
+\DeclareMathSymbol{z}{\mathalpha}{italics}{"7A}
+
+\DeclareMathSymbol{A}{\mathalpha}{italics}{"41}
+\DeclareMathSymbol{B}{\mathalpha}{italics}{"42}
+\DeclareMathSymbol{C}{\mathalpha}{italics}{"43}
+\DeclareMathSymbol{D}{\mathalpha}{italics}{"44}
+\DeclareMathSymbol{E}{\mathalpha}{italics}{"45}
+\DeclareMathSymbol{F}{\mathalpha}{italics}{"46}
+\DeclareMathSymbol{G}{\mathalpha}{italics}{"47}
+\DeclareMathSymbol{H}{\mathalpha}{italics}{"48}
+\DeclareMathSymbol{I}{\mathalpha}{italics}{"49}
+\DeclareMathSymbol{J}{\mathalpha}{italics}{"4A}
+\DeclareMathSymbol{K}{\mathalpha}{italics}{"4B}
+\DeclareMathSymbol{L}{\mathalpha}{italics}{"4C}
+\DeclareMathSymbol{M}{\mathalpha}{italics}{"4D}
+\DeclareMathSymbol{N}{\mathalpha}{italics}{"4E}
+\DeclareMathSymbol{O}{\mathalpha}{italics}{"4F}
+\DeclareMathSymbol{P}{\mathalpha}{italics}{"50}
+\DeclareMathSymbol{Q}{\mathalpha}{italics}{"51}
+\DeclareMathSymbol{R}{\mathalpha}{italics}{"52}
+\DeclareMathSymbol{S}{\mathalpha}{italics}{"53}
+\DeclareMathSymbol{T}{\mathalpha}{italics}{"54}
+\DeclareMathSymbol{U}{\mathalpha}{italics}{"55}
+\DeclareMathSymbol{V}{\mathalpha}{italics}{"56}
+\DeclareMathSymbol{W}{\mathalpha}{italics}{"57}
+\DeclareMathSymbol{X}{\mathalpha}{italics}{"58}
+\DeclareMathSymbol{Y}{\mathalpha}{italics}{"59}
+\DeclareMathSymbol{Z}{\mathalpha}{italics}{"5A}
+%% end Rustan's math fonts
+
+%-----------------compact itemization ------------------------------------
+\newenvironment{ditemize}{%   itemized lists w/o interline space
+\begin{list}{$\bullet$}{%
+\setlength{\itemsep}{0pt}\setlength{\rightmargin}{0pt}%
+\setlength{\leftmargin}{1em}\setlength{\parsep}{0ex}}}{
+\end{list}}
+%-------------------------------------------------------------------------
+
+%%% Bold math alphabet
+\DeclareMathAlphabet{\mathbfsf}{\encodingdefault}{\sfdefault}{bx}{n}
+
+%%% Basic macros
+
+\newcommand{\etc}{\emph{etc.}}
+\newcommand{\etal}{\emph{et al.}}
+\newcommand{\eg}{\emph{e.g.}}
+\newcommand{\ie}{\emph{i.e.}}
+
+\newcommand{\keyw}[1]{\ensuremath{\mathsf{#1}}\xspace}
+\newcommand{\option}[1]{\keyw{option}\;#1}
+\newcommand{\List}[1]{\keyw{list}\;#1}
+\newcommand{\Set}[1]{\keyw{set}\;#1}
+\newcommand{\Type}{\keyw{Type}}
+\newcommand{\Prop}{\keyw{Prop}}
+\newcommand{\Some}[1]{\keyw{Some}\ #1}
+\newcommand{\None}{\keyw{None}}
+
+\newcommand{\blueboldkeyw}[1]{{\color{MidnightBlue} \mathbfsf{{#1}}}}
+\newcommand{\blackboldkeyw}[1]{{\color{Black} \mathbfsf{{#1}}}}
+
+\newcommand{\myif}[0]{\blackboldkeyw{if}}
+\newcommand{\mythen}[0]{\blackboldkeyw{then}}
+\newcommand{\myelse}[0]{\blackboldkeyw{else}}
+\newcommand{\mycase}[0]{\blackboldkeyw{case}}
+\newcommand{\myof}[0]{\blackboldkeyw{of}}
+\newcommand{\myis}[0]{\blackboldkeyw{is}}
+\newcommand{\mywith}[0]{\blackboldkeyw{with}}
+\newcommand{\mylet}[0]{\blackboldkeyw{let}}
+\newcommand{\myin}[0]{\blackboldkeyw{in}}
+\newcommand{\myfieldupd}[3]{#1\ \mywith\ \{#2:=#3\}}
+\newcommand{\mydo}[0]{\blackboldkeyw{do}}
+\newcommand{\myreturn}[0]{\blackboldkeyw{return}}
+\newcommand{\mydefault}[0]{\_\!\_\!\_}
+
+\newcommand{\codecomment}[1]{
+  \textrm{/\!/}\textrm{\ #1}
+}
+
+\newcommand\pair[2]{\left<#1,#2\right>}
+\newcommand{\boxdotright}{\!\mathrel\boxdot\joinrel\rightarrow\!}
+\newcommand{\islock}{\boxdotright}
+\newcommand{\islocksh}[1]{\stackrel{#1}\boxdotright}
+\newcommand{\nxt}[2]{\mathsf{next}\,#1\,#2}
+\newcommand{\lseg}[2]{#1\!\! \leadsto \!\!#2}
+
+\renewcommand{\to}{\rightarrow}
+\newcommand{\topart}{\rightharpoonup}
+\newcommand{\defeq}{\triangleq}
+
+\newcommand{\upd}[3]{#1[#2\mapsto #3]}
+\newcommand{\eval}[6]{#1 \vdash #5 \Downarrow_{#2, #3, #4} #6}
+\newcommand{\step}[5]{#1 \vdash #2, #3 \longmapsto #4, #5}
+%%% \estep: #6 is effect set
+\newcommand{\estep}[6]{#1 \vdash #2, #3\ \overset{#6}{\longmapsto} #4, #5}
+\newcommand{\tightoverset}[2]{%
+  \mathop{#2}\limits^{\vbox to -.5ex{\kern-0.6ex\hbox{$\hspace{-7pt}\scriptstyle{#1}$}\vss}}}
+\newcommand{\estepplus}[6]{#1 \vdash #2, #3\ \tightoverset{#6}{\longmapsto^{\!+}} #4, #5}
+\newcommand{\estepnoge}[5]{#1, #2\ \overset{#5}{\longmapsto} #3, #4}
+\newcommand{\estepplusnoge}[5]{#1, #2\ \tightoverset{#5}{\longmapsto^{\!+}} #3, #4}
+%%% \rcstep: same args as \estep
+\newcommand{\rcstep}[6]{#1 \vdash #2, #3\ \overset{#6}{\longmapsto}_{\keyw{rc}} #4, #5}
+
+\newcommand{\RelatedText}[5][0.425\textwidth]{%
+\begin{math}%
+  \left.% 
+  \parbox{#1}{#4}\vphantom{\parbox{#1}{#5}}%
+  \right#3%
+  \parbox{#2}{#5}\vphantom{\parbox{#2}{#4}}%
+\end{math}
+}%
+
+\newcommand{\interp}[1]{\llbracket #1 \rrbracket}
+
+%%% Core semantics syntax
+
+\newcommand{\valtype}{\mathcal{V}}
+\newcommand{\eftype}{\mathcal{F}}
+\newcommand{\initCore}{\keyw{initial\_core}}
+\newcommand{\atExt}{\keyw{at\_external}}
+\newcommand{\aftExt}{\keyw{after\_external}}
+\newcommand{\halted}{\keyw{halted}}
+\newcommand{\corestep}{\keyw{corestep}}
+
+%%% Linking macros
+
+\newcommand{\link}[1]{\mathcal{L}(#1)}
+\newcommand{\concur}[1]{\mathcal{C}(#1)}
+\newcommand{\context}[2]{\link{#1, #2}}
+
+%%% CompCert macros
+
+\newcommand{\Vptr}{\keyw{Vptr}}
+\newcommand{\mem}{\keyw{mem}}
+\newcommand{\Genv}{\keyw{Genv}}
+\newcommand{\val}{\keyw{val}}
+
+%%% Structured injection macros
+
+\newcommand{\Ownership}{\keyw{Ownership}}
+\newcommand{\Own}{\keyw{own}}
+\newcommand{\StrInj}{\keyw{StructuredInjection}}
+\newcommand{\us}{\keyw{f_{us}}}
+\newcommand{\them}{\keyw{f_{them}}}
+\newcommand{\all}{\keyw{f_{all}}}
+\newcommand{\vis}{\keyw{vis}}
+\newcommand{\internIncr}{\sqsubseteq_{\keyw{us}}}
+\newcommand{\externIncr}{\sqsubseteq_{\keyw{them}}}
+\newcommand{\owned}{\keyw{owned}\xspace}
+\newcommand{\shared}{\keyw{shared}\xspace}
+\newcommand{\foreign}{\keyw{foreign}\xspace}
+\newcommand{\public}{\keyw{public}\xspace}
+\newcommand{\publicize}{\keyw{export}\xspace}
+\newcommand{\syndicate}{\keyw{import}\xspace}
+\newcommand{\inject}{\keyw{inject}}
+\newcommand{\presglobs}{\keyw{preserves\_globals}}
+
+%%% Structured simulation macros
+
+\newcommand{\injects}[3]{#2 \rightarrowtail_{#1} #3}
+\newcommand{\ssim}{\preceq}
+%%% \match parameters:
+%%% 1. \mu 
+%%% 2. c_src, 3. m_src
+%%% 4. c_tgt, 5. m_tgt
+\newcommand{\match}[5]{
+  \langle #2, #3\rangle \sim_{#1} \langle #4, #5\rangle }
+
+\newcommand{\leakout}{\keyw{leak\_out}}
+\newcommand{\boldleakout}{\blackboldkeyw{leak\_out}}
+
+\newcommand{\leakin}{\keyw{leak\_in}}
+\newcommand{\boldleakin}{\blackboldkeyw{leak\_in}}
+
+\newcommand{\unchon}{\keyw{unchanged\_on}}
+\newcommand{\boldunchon}{\blackboldkeyw{unchanged\_on}}
+
+\newcommand{\blocksOf}{\keyw{blocksOf}}
+
+%%% Reach-closed macros
+\newcommand{\RC}[1]{#1_{\keyw{rc}}}
+
+\newcommand{\restrict}[2]{\ensuremath{{#1}\!\downharpoonright_{#2}}}
+
+%%% CompComp macros
+\newcommand{\phase}[1]{#1}
+
+
+\newcommand{\later}{\triangleright}

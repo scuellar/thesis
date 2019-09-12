@@ -1,0 +1,56 @@
+\section{Main theorem}
+\label{sec:topbottom:theorem}
+
+\begin{table}
+\begin{lstlisting}
+	
+  Theorem top2bottom_correct:
+      CSL_correct C_program ->
+      CompCert_compiler C_program = Some Asm_program ->
+      
+      forall (src_m:Memory.mem) (src_cpm:Clight.state),
+        CSL_init_setup C_program src_m src_cpm ->
+        Clight.entry_point (Clight.globalenv C_program) src_m src_cpm (main_ptr C_program) nil ->
+        forall (limited_builtins:Asm_core.safe_genv x86_context.X86Context.the_ge),
+        asm_prog_well_formed Asm_program limited_builtins ->
+        
+        forall (U:schedule), exists (tgt_m0 tgt_m: mem) (tgt_cpm:ThreadPool.t),
+            permissionless_init_machine
+              Asm_program limited_builtins
+              tgt_m0 tgt_cpm tgt_m (main_ptr C_program) nil /\
+            spinlock_safe U tgt_cpm tgt_m.
+
+\end{lstlisting}
+\end{table}
+Explaining the main theorem:
+
+Assumptions:
+
+\begin{itemize}
+\item \lstinline{CSL_correct C_program}: States that the program has been proven correct in CSL, 
+as described in  [section CSL ref] %TODO reference
+
+\item \lstinline{CompCert_compiler}: States that the CompCert compiler translates 
+\lstinline{C_program} into the assembly program \lstinline{Asm_program}.  
+
+\item \lstinline{CSL_init_setup}:  States that \lstinline{src_m} and \lstinline{src_cpm} are the initial 
+memory and state as defined by the program \lstinline{C_program}... According to CSL
+
+\item \lstinline{Clight.entry_point }: Same as above... According to Clight. %TODO
+
+\item \lstinline{limited_builtins}: Statically checkable property stating that \lstinline{Asm_program} 
+doesn't have unsupported builtins.
+
+\item \lstinline{asm_prog_well_formed}: Another statically checkable property stating that the initial 
+memory and global environment created by \lstinline{Asm_program} are well formed.
+\end{itemize}
+
+Conclusions:
+
+\begin{itemize}
+\item \lstinline{permissionless_init_machine}: There exists initial memories and state for \lstinline{Asm_program}
+
+\item \lstinline{spinlock_safe}: The initial state is safe and "spinlock well synchronized"
+as defined in [reference to spinlock]% Check how this is defnied  
+
+\end{itemize}

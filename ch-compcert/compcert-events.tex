@@ -1,0 +1,32 @@
+\section{Memory events.}
+
+The visible behavior of the CompCert semantics (for all languages) is a trace of events, as described in \ref{code:oldevents}. It records interactions with the outside world; for example, the results of a read system call will record a \Coqcode{Event_syscall} together with the name of the system call, its parameters, and its result. The only pointers that can appear in the trace are locations of global variable. As we explained above, these events are insufficient to capture the behavior of \Ccode{incr} in \ref{example:remember}. The events are also not sufficient to express any kind of behavior that depends on the memory. For example, a call to \Ccode{pthread_mutex_ulock(&l)} not only changes the the state of the lock \Ccode{l}, conceptually it gives away control to the data in memory protected by \Ccode{l}. Such behavior that reveals locations in memory cannot be expressed in CompCert events that can't have pointers on them (except the location of global variables). More generally, these events are poorly suited to express any sort of shared memory interactions, such as concurrency or separated compilation. 
+\begin{table}\centering
+\begin{multicols}{2}
+\begin{lstlisting}[style=CoqTheorem-list]
+Inductive event: Type :=
+  $\cdots$
+  | Event_acq_rel: list mem_effect -> delta_perm_map -> list mem_effect -> event
+  | Event_spawn: block -> delta_perm_map -> delta_perm_map -> event.
+  \end{lstlisting}
+  
+  \begin{lstlisting}
+Inductive mem_effect :=
+|  Write : forall (b : block) (ofs : Z)
+            (bytes : list memval), mem_effect
+| Alloc: forall (b : block)(lo hi:Z), mem_effect
+| Free: forall (l: list (block * Z * Z)), mem_effect.
+  \end{lstlisting}
+\end{multicols}
+\caption{The new events in CompCert:  \Coqcode{mem_effect} reflects changes to memory and \Coqcode{delta_perm_map} represents trasfer of \Coqcode{Cur} permissions.}\label{code:newevents}
+\end{table}
+We propose to include 2 new types of events which we call \emph{memory events} as described in table \ref{code:newevents}. As their name suggests, they contain references to locations in memory, beyond the global variables.  
+%Acquire release
+The first one, \Coqcode{Event_acq_rel}, represents a generic memory interactions where the external function performs some arbitrary changes to memory, recorded by a list of \Coqcode{mem_effect}s, and transfers some permissions recorded by \Coqcode{delta_perm_map}. We find it convenient to split the effects on memory as those that happen before the changes in permissions and those that happen after. 
+%Event spawn
+The second one,  \Coqcode{Event_spawn}, represents the creation of a new thread or a new module. It records the function being called, as a block number, and the change in permissions by two \Coqcode{delta_perm_map}, one representing the permissions given and the other the starting permissions of a new thread/module.
+
+The correctness of the CompCert compiler is formulated as a preservation of traces. However, if our traces contain memory events and the memory can be reordered by compilation, the trace must be reordered accordingly. Thus our new correctness will be formulated up to memory reordering as shown in \ref{sec:step_diagram_sim}. In fact, if a compiler pass (or passes) don't change the order of memory (such as equality and extension passes), then the trace is preserved and nothing changes in the simulation. If the pass changes the order of memory according to some $j$, then we need show that the source and target traces,$t$ and $t'$, are related by \Coqcode{inject_trace_strong j t t'}. That means that events in $t$ and $t'$ are identical except all memory locations are reordered according to $j$. To add this property, we need simulations to expose how they reorder memory. The full description of our new conjunctive simulation will be explained in section \ref{sec:compcert-sim}.
+
+
+Compilers not only reorder memory, sometimes undefined values in the source program are mapped to concrete values in the target. Such mappings are useful in compiler passes such as register coalescing, where registers that were previously uninitialized, can now map to an initialized register with concrete values. The predicate \Coqcode{inject_trace_strong} always maps undefined values to undefined values. This is a reasonable restriction since inspecting undefined values is not an allowed behavior so they shouldn't appear in the trace. However, if an application required traces with undefined values, we can still support that. It turns out that it is enough to prove that the execution with the \emph{strongly injected} trace is safe, and from it we can derive save executions for all traces that have some undefined values defined.

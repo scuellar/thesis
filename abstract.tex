@@ -1,0 +1,21 @@
+Optimizing compilers change a program based on a formal analysis of its code and
+modern processors further rearrange the program order. It is hard to reason about such 
+transformations, which makes them a source of bugs, particularly for concurrent 
+shared-memory programs where the order of execution is critical. On the other hand, 
+programmers should reason about their program in the source language, which abstracts 
+such low level details. 
+
+We present the Concurrent Permission Machine (CPM),  a semantic model for
+shared-memory concurrent programs, which is: (1) sound for high-order Concurrent 
+Separation Logic, (2) convenient to reason about compiler correctness, and (3) useful 
+for proving reduction theorems on weak memory models. The key feature of the CPM
+is that it exploits the fact that correct shared-memory programs are permission coherent: 
+threads have (at any given time) noncompeting permission to access memory, and their
+load/store operations respect those permissions.
+
+Compilers are often written with sequential code in mind, and proving the correctness of
+those compilers is hard enough without concurrency. Indeed, the machine-checked 
+proof of correctness for the CompCert C compiler was a major advance in the field. 
+Using the CPM to conveniently distinguish sequential execution from concurrent 
+interactions, I show how to reuse the (sequential) CompCert proof, without major changes, 
+to guarantee a stronger concurrent-permission-aware notion of correctness.
