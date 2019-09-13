@@ -5,7 +5,7 @@ CompCert can compile programs where \Ccode{main} takes arguments, but its correc
 Passing arguments to main is of general interest and particularly important for our work with concurrency. Spawning new threads behaves very similar to starting a program by calling \Ccode{main}: The library function that spawns a new thread \Ccode{f} (e.g. \Ccode{pthread_create}) must create a new stack, push the arguments to stack and then call \Ccode{f} just like a program startup (which calls \Ccode{_start()} and \Ccode{__libc_start_main()}). Our new predicate \Coqcode{entry_point} is general enough to capture this two types of preprocessing.
 Notice that if we restricted our semantics to spawning threads whit no arguments, threads wouldn't be able to share pointers and thus they would all execute in disjoint pieces of memory with no communication. That would be a much easier and less interesting result. 
 
-Now that we defined a new starting point for executions, we must prove that compilation preserves the predicate \Coqcode{entry_point} in the same way that CompCert's simluation preserves \Coqcode{initial_state}. The proof largely follows the simulation of internal function calls which is already proven in CompCert, so we omit the details here. 
+Now that we defined a new starting point for executions, we must prove that compilation preserves the predicate \Coqcode{entry_point} in the same way that CompCert's simulation preserves \Coqcode{initial_state}. The proof largely follows the simulation of internal function calls which is already proven in CompCert, so we omit the details here. 
 
 \begin{table}\centering
 \begin{multicols}{2}\begin{tikzcd}[column sep=tiny]
@@ -35,15 +35,15 @@ One of the difficulty in simulating the initialization is that, in architectures
 
 Our generic predicate \Coqcode{entry_points: mem -> state -> val -> list val -> Prop} takes a memory \Coqcode{m}, a state \Coqcode{s}, a pointer to the entry function \Coqcode{fun_ptr} of type \Coqcode{val}, and a list of arguments \Coqcode{args}. This predicate is language dependent, but it generally has three parts:
 \begin{enumerate}
-\item Checks memory is well formed. That is, it contains no ill-formed pointers to invalid memory. CompCert generally maintains that well formed programs don't create dangling pointers pointers.\footnote{A well formed program, should not compare, read or write to invalid pointers. Hence, dangling pointers behave semantically as undefined values and could be modeled that way.}
-\item Arguments are well formed. Among other things, they have the right types for the function being called, they have no ill-formed pointers, and fit in the stack. 
+\item Checks that memory is well-formed. That is, it contains no ill-formed pointers to invalid memory. CompCert generally maintains that well-formed programs don't create dangling pointers.\footnote{A well-formed program, should not compare, read or write to invalid pointers. Hence, dangling pointers behave semantically as undefined values and could be modeled that way.}
+\item Arguments are well-formed. Among other things, they have the right types for the function being called, they have no ill-formed pointers, and fit in the stack. 
 \item Global environment is allocated correctly. This makes sure that the environment is in memory and that the function is declared as a public in the environment.
 \end{enumerate}
 In the rest of this section, we explore the definition of \Coqcode{entry_points} for different languages and show how we prove that different CompCert phases preserve the predicate.
 
 \subsubsection{C frontend}
 All of the C-like languages (\emph{Clight, Csharp, Csharpminor}) have similar \Coqcode{entry_point}, so we present here the one for Clight in \ref{code:entry_point_Clight}.
-\lstset{moredelim=*[s][\color{green}]{Inductive}{' '}}
+%\lstset{moredelim=*[s][\color{green}]{Inductive}{' '}} %playing arounds
 \begin{table}
 \begin{lstlisting}[ numbers=left]
 Inductive entry_point (ge:genv): mem -> state -> val -> list val -> Prop :=
@@ -64,17 +64,17 @@ Inductive entry_point (ge:genv): mem -> state -> val -> list val -> Prop :=
 \end{table}
 Lines 4-6 ensure that the environment is allocated in memory and it contains the function \Coqcode{f} with the right type signature. Line 7 states that the initial memory has no dangling pointers. Lines 8-11 say that the arguments have the right type and have no dangling pointers. The predicate \Coqcode{bounded-args}, enforces that the arguments fit in the stack, which is architecture dependent. It is reasonable to replace this with a small enough bound that fits all architectures, like $4$, but we keep it general here. Finally, the entry state, in line 13, is defined as a call to \Coqcode{f} with an empty continuation.
 
-Our empty continuation \Coqcode{Kstop} takes \Coqcode{targs} as an arguemnt. That is because continuations also represent the call stack; \Coqcode{Kstop targs} represents the "pre-stack" of \Ccode{_start()} that might contain some arguments for \Coqcode{f}.
+Our empty continuation \Coqcode{Kstop} takes \Coqcode{targs} as an argument. That is because continuations also represent the call stack; \Coqcode{Kstop targs} represents the "pre-stack" of \Ccode{_start()} that might contain some arguments for \Coqcode{f}.
 
 \subsubsection{Register transfer languages}
-In the Cminorgen phase, CompCert coalesces  all function variables into a stackframe. Some functions might get empty stackframes (i.e., a memory block with empty permissions, that cannot be written to), if none of their variables has their address taken. These stackframes are important, even the empty ones, because that is where spill variables will be written after register allocation in the Allocation phase. We follow suit and create an empty stackframe for \Ccode{_start()}. The stack is empty because the compiler has not yet decided what arguments will be passed in memory and which ones in register. Even for architectures that pass all arguments in memory, this is not doesn't until the Stacking pass. So for languages before Stacking (Cminor, CminorSel, RTL, LTL, Linear), there is an extra line in \Coqcode{entry_point} to make sure that the empty stackframe is allocated:
+In the Cminorgen phase, CompCert coalesces  all function variables into a stack frame. Some functions might get empty stack frames (i.e., a memory block with empty permissions, that cannot be written to), if none of their variables has their address taken. These stack frames are important, even the empty ones, because that is where spill variables will be written after register allocation in the Allocation phase. We follow suit and create an empty stack frame for \Ccode{_start()}. The stack is empty because the compiler has not yet decided what arguments will be passed in memory and which ones in register. Even for architectures that pass all arguments in memory, this is not doesn't until the Stacking pass. So for languages before Stacking (Cminor, CminorSel, RTL, LTL, Linear), there is an extra line in \Coqcode{entry_point} to make sure that the empty stack frame is allocated:
 \begin{lstlisting}
 	Mem.alloc m0 0 0 = (m1, stk) \end{lstlisting}
 The rest of the predicate is almost identical to the one in \ref{code:entry_point_Clight}.
 
 \subsubsection{Machine languages}
 
-In the machine languages (Mach and Asm), a function expects certain shape from the stackframe of its caller. We replace the empty stackframe allocation above, with the constructon of the "pre-stackframe" as shown in \ref{code:entry_point_Mach}.
+In the machine languages (Mach and Asm), a function expects certain shape from the stack frame of its caller. We replace the empty stack frame allocation above, with the constructon of the "pre-stack frame" as shown in \ref{code:entry_point_Mach}.
 \begin{table}
 \begin{lstlisting}[ numbers=left]
       $\vdots$

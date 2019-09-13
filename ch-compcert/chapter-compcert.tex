@@ -1,4 +1,4 @@
-\chapter{Making Compcert a \emph{concjunctive} compiler }\label{ch:compcert}
+\chapter{Making Compcert a \emph{conjunctive} compiler }\label{ch:compcert}
 
 The simple code in \ref{example:remember} communicates with its environment in two main ways: (1) it takes an address as input and (2) reads from and writes to this location to increment the value stored there.
 \begin{table}\begin{lstlisting}[language=C, numbers=left]
@@ -13,7 +13,7 @@ void incr(void){
 \caption{The function \Ccode{remember} records the address of some buffer, and \Ccode{incr} increments it by one. }
 \label{example:remember}
 \end{table}
-We will see how the specifications of CompCert prevents us from reasoning about such program as compilation units and as external functions and we will show how to extend the specificatoin of a compiler to lift thees limitations.
+We will see how the specifications of CompCert prevents us from reasoning about such program as compilation units and as external functions, and we will show how to extend the specification of a compiler to lift thees limitations.
 
 First, CompCert can't give any guarantees about compiling the code in \ref{example:remember} because it is not a complete program. It is reasonable to expect that the function \Ccode{remember} runs safely, given some assumptions (e.g. \Ccode{*p} is a valid address in memory). Unfortunately, CompCert's semantics assumes that a program starts executing with a call to  \Ccode{main()} with no arguments. In fact, the only possible initial states, are characterized by a predicate \Coqcode{initial_state: state -> Prop} that takes no additional arguments. You can see an instantiation of the predicate for Clight in \ref{code:initial_state}. So, even though CompCert correctly compiles the code, it's specification gives no guarantees of any execution other than the one that starts by calling main with no arguments.
 \begin{table}
@@ -30,7 +30,7 @@ Inductive initial_state (p: program): state -> Prop :=
 \caption{The \Ccode{initial_state} in C and Clight is a call to \Ccode{main}. It also enforces that it takes no arguments (\Coqcode{Tnil}) and returns an integer (\Coqcode{ type_int32s}).}\label{code:initial_state}
 \end{table}
 
-Second, CompCert's can't reason about programs that call \Ccode{remember} and \Ccode{incr} because their behavior depends on their internal state (the \Ccode{buff} pointer). CompCert's semantics allows calls to external calls that are assumed to be correct but unfortunately the specification of "correctness" is too strict, it assumes that the function's behavior is fully determined by (1) the state of memory, (2) the function arguments and (3) the events produced by the function.\footnote{Leroy \cite{Leroy-Compcert-CACM} claims that "inputs given to the programs are uniquely determined by their previous outputs", but this is not exactly correct. A more accurate representation would be to say "inputs given to the programs are uniquely determined by their last outputs". As we will see in \ref{sec:compcert-sim}, it would be much stronger to determine inputs based on all historic outputs.} The execution of \Ccode{incr} also depends on arguments passed to a previous external call (namely, \Ccode{*p} passed to \Ccode{remember}). One could make this explicit in the event trace but CompCert events, shown in \ref{code:oldevents}, can only contain integers, floats or pointers to global variables.
+Second, CompCert's can't reason about programs that call \Ccode{remember} and \Ccode{incr} because their behavior depends on their internal state (the \Ccode{buff} pointer). CompCert's semantics allows calls to external calls that are assumed to be correct but unfortunately the specification of correctness is too strict, it assumes that the function's behavior is fully determined by (1) the state of memory, (2) the function arguments and (3) the events produced by the function.\footnote{Leroy \cite{Leroy-Compcert-CACM} claims that "inputs given to the programs are uniquely determined by their previous outputs", but this is not exactly correct. A more accurate representation would be to say "inputs given to the programs are uniquely determined by their last outputs". As we will see in \ref{sec:compcert-sim}, it would be much stronger to determine inputs based on all historic outputs.} The execution of \Ccode{incr} also depends on arguments passed to a previous external call (namely, \Ccode{*p} passed to \Ccode{remember}). One could make this explicit in the event trace but CompCert events, shown in \ref{code:oldevents}, can only contain integers, floats or pointers to global variables.
  
 \begin{table}\centering
 \begin{multicols}{2}
