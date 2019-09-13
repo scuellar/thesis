@@ -7,6 +7,26 @@ Notice that if we restricted our semantics to spawning threads whit no arguments
 
 Now that we defined a new starting point for executions, we must prove that compilation preserves the predicate \Coqcode{entry_point} in the same way that CompCert's simluation preserves \Coqcode{initial_state}. The proof largely follows the simulation of internal function calls which is already proven in CompCert, so we omit the details here. 
 
+\begin{table}\centering
+\begin{multicols}{2}\begin{tikzcd}[column sep=tiny]
+ \arrow[d, "\text{initial\_state}"']
+&  &  \arrow[d, dotted,  "\text{initial\_state}"] \\
+s_1 & \widesim{} & s_2
+\end{tikzcd}
+
+(a)
+
+\begin{tikzcd}[column sep=tiny]
+\arrow[d, "\text{entry\_points } m_0 \ f \ \text{args}"']
+&  &  \arrow[d, dotted,  "\text{entry\_points } m_0 \ f \ \text{args}"] \\
+s_1 & \widesim{} & s_2
+\end{tikzcd}
+
+(b)
+\end{multicols}
+\caption{Entry simulation diagrams. (a) if $s_1$ is an initial state for the source program, then there exists some state $s_2$ that is related to $s_1$ and is an initial state for the compiled program. (b) Just like the diagram for initial states, but it generalizes and exposes the initial memory $m_0$, the entry function $f$ and the arguments \Coqcode{args}. The entire simulation is parametric on the realation $\sim$.}\label{table:initial_sim}
+\end{table}
+
 \subsection{Simulating initialization preprocessing.}
 Before \Ccode{main} ever starts executing, there is an initialization process that sets up the stack and the registers, before main is executed. The preprocessing function(s) often called \Ccode{_start}, \Ccode{premain} or \Ccode{startup}, will create a stack, set up the arguments in the stack or in registers, set up the environment (\Ccode{envp}), set up the return address (a call to \Ccode{exit()}), and other bookkeeping. 
 
@@ -15,7 +35,7 @@ One of the difficulty in simulating the initialization is that, in architectures
 
 Our generic predicate \Coqcode{entry_points: mem -> state -> val -> list val -> Prop} takes a memory \Coqcode{m}, a state \Coqcode{s}, a pointer to the entry function \Coqcode{fun_ptr} of type \Coqcode{val}, and a list of arguments \Coqcode{args}. This predicate is language dependent, but it generally has three parts:
 \begin{enumerate}
-\item Checks memory is well formed. That is, it contains no ill-formed pointers to invalid memory. CompCert generally maintains that well formed programs don't create dangling pointers pointers.\footnote{A well formed program, should not read or write to invalid pointers. Hence, dangling pointers behave semantically as undefined values and could be modeled that way.}
+\item Checks memory is well formed. That is, it contains no ill-formed pointers to invalid memory. CompCert generally maintains that well formed programs don't create dangling pointers pointers.\footnote{A well formed program, should not compare, read or write to invalid pointers. Hence, dangling pointers behave semantically as undefined values and could be modeled that way.}
 \item Arguments are well formed. Among other things, they have the right types for the function being called, they have no ill-formed pointers, and fit in the stack. 
 \item Global environment is allocated correctly. This makes sure that the environment is in memory and that the function is declared as a public in the environment.
 \end{enumerate}
@@ -23,6 +43,7 @@ In the rest of this section, we explore the definition of \Coqcode{entry_points}
 
 \subsubsection{C frontend}
 All of the C-like languages (\emph{Clight, Csharp, Csharpminor}) have similar \Coqcode{entry_point}, so we present here the one for Clight in \ref{code:entry_point_Clight}.
+\lstset{moredelim=*[s][\color{green}]{Inductive}{' '}}
 \begin{table}
 \begin{lstlisting}[ numbers=left]
 Inductive entry_point (ge:genv): mem -> state -> val -> list val -> Prop :=

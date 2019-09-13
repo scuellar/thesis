@@ -1,22 +1,65 @@
+
+\definecolor{ltblue}{rgb}{0,0.4,0.4}
+\definecolor{dkblue}{rgb}{0,0.1,0.6}
+\definecolor{dkgreen}{rgb}{0,0.35,0}
+\definecolor{dkviolet}{rgb}{0.3,0,0.5}
+\definecolor{dkred}{rgb}{0.5,0,0}
+
 %%
 %% Coq definition (c) 2001 Guillaume Dufay 
 %%                           <Guillaume.Dufay@sophia.inria.fr>
 %% with some modifications by J. Charles (2005)
 %% and hacks by Andrew Appel (2011)
+%% and more additions by Santiago Cuellar with inspiration from Assia Mahboubi 
 %%
-\lstdefinelanguage{Coq}%
-  {morekeywords={Context,Variable,Inductive,CoInductive,Fixpoint,CoFixpoint,%
-      Definition,Lemma,Theorem,Axiom,Local,Save,Grammar,Syntax,Intro,%
-      Program,Next,Obligation,Notation,Infix,Global,Coercion,%
-      Trivial,Qed,Intros,Symmetry,Simpl,Rewrite,Apply,Elim,Assumption,%
-      Left,Cut,Case,Auto,Unfold,Exact,Right,Hypothesis,Pattern,Destruct,%
-      Constructor,Defined,Fix,Record,Proof,Induction,Hints,Exists,let,in,%
-      Parameter,Split,Red,Reflexivity,Transitivity,if,then,else,Opaque,%
-      Transparent,Inversion,Absurd,Generalize,Mutual,Cases,of,end,Analyze,%
-      AutoRewrite,Functional,Scheme,params,Refine,using,Discriminate,Try,%
-      Require,Load,Import,Scope,Set,Open,Section,End,match,with,Ltac, %, exists, forall
-      Declare,Instance, Class, Tactic, Abort, Hint, Goal, as, return, Function
-	},% 
+\lstdefinelanguage{Coq}{
+% Vernacular commands
+morekeywords=[1]{Section, Module, End, Require, Import, Export,
+  Variable, Variables, Parameter, Parameters, Axiom, Hypothesis,
+  Hypotheses, Notation, Local, Tactic, Reserved, Scope, Open, Close,
+  Bind, Delimit, Definition, Let, Ltac, Fixpoint, CoFixpoint, Add,
+  Morphism, Relation, Implicit, Arguments, Unset, Contextual,
+  Strict, Prenex, Implicits, Inductive, CoInductive, Record,
+  Structure, Canonical, Coercion, Context, Class, Global, Instance,
+  Program, Infix, Theorem, Lemma, Corollary, Proposition, Fact,
+  Remark, Example, Proof, Goal, Save, Qed, Defined, Hint, Resolve,
+  Rewrite, View, Search, Show, Print, Printing, All, Eval, Check,
+  Projections, inside, outside, Def},
+%
+% Gallina
+morekeywords=[2]{forall, exists, exists2, fun, fix, cofix, struct,
+  'match ', ' with', end, as, in, return, let, if, is, then, else, for, 'of ',
+  nosimpl, when},
+%
+% Sorts
+morekeywords=[3]{Type, Prop, Set, true, false, option},
+%
+% Various tactics, some are std Coq subsumed by ssr, for the manual purpose
+morekeywords=[4]{pose, "set ", move, case, elim, apply, clear, hnf,
+  intro, intros, generalize, rename, pattern, 'after ', destruct,
+  induction, using, refine, inversion, ' injection', rewrite, congr,
+  unlock, compute, ring, field, fourier, replace, fold, unfold,
+  change, cutrewrite, simpl, suff, wlog, suffices, without,
+  loss, nat_norm, assert, cut, trivial, revert, bool_congr, nat_congr,
+  symmetry, transitivity, auto, split, left, right, autorewrite},
+%
+% Terminators
+morekeywords=[5]{by, done, exact, reflexivity, tauto, romega, omega,
+  assumption, solve, contradiction, discriminate},
+  %
+identifierstyle={\sffamily\color{black}},
+% Style for declaration keywords
+keywordstyle=[1]{\sffamily\bfseries\color{dkviolet}},
+% Style for gallina keywords
+keywordstyle=[2]{\sffamily\bfseries\color{dkgreen}},
+% Style for sorts keywords
+keywordstyle=[3]{\sffamily\bfseries\color{ltblue}},
+% Style for tactics keywords
+keywordstyle=[4]{\sffamily\bfseries\color{dkblue}},
+% Style for terminators keywords
+keywordstyle=[5]{\sffamily\bfseries\color{dkred}},
+% Style for comments
+commentstyle={\sffamily\bfseries\color{dkgreen}},
    sensitive, %
    morecomment=[n]{(*}{*)},%
 %   morestring=[d]",%
@@ -42,7 +85,7 @@
    {|--}{{$\,\vdash\,$}}2
    {|>}{{\large$\triangleright\!\!$\ }}1
 %   {-*}{$\wand$}1    doesn't work, don't know why
-   {\\\/}{{$\vee$\ }}1
+   {\\\/}{{$\vee$\ }}2
    {~}{{$\sim$}}1
    {`}{$\mbox{\textbf{\`{}}\hspace{-.2ex}}$}1
    {<>}{{$\not=$}}1

@@ -3,3 +3,9 @@
 %% I might want to merge the two in the future, but for now this separation works.
 
 \newcommand{\compcert}{CompCert}
+
+
+%% LONG sim ~ (requires amsmath,graphicx)
+\newcommand{\widesim}[2][2.5]{
+  \mathrel{\overset{#2}{\scalebox{#1}[1]{$\sim$}}}
+}

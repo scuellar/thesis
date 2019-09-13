@@ -73,7 +73,7 @@
 with shared memory concurrency. }
 
 \submitted{subm. Date}  % degree conferral date (January, April, June, September, or November)
-\copyrightyear{?? copyright}  % year in which the copyright is secured by publication of the dissertation.
+\copyrightyear{tbd copyright}  % year in which the copyright is secured by publication of the dissertation.
 \author{Santiago Cuellar}
 \adviser{Andrew Appel}  %replace with the full name of your adviser
 %\departmentprefix{Program in}  % defaults to "Department of", but programs need to change this.
@@ -133,6 +133,7 @@ with shared memory concurrency. }
 %Code highlight + specific highlights for coq
 %\usepackage{minted}
 \usepackage{listings}
+\usepackage{xcolor}
 \usepackage{lib/lstlangcoq}
 % Several coq and C language settings
 \input{lib/lang-defs}
@@ -152,7 +153,9 @@ with shared memory concurrency. }
 %Math letters like |P
 \usepackage{ dsfont }
 %Math stuff
-\usepackage{ amsmath}
+\usepackage{ amsmath,}
+% To add nice arrows for diagrams
+\usepackage{tikz-cd}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% Printed vs. online formatting
@@ -292,11 +295,10 @@ with shared memory concurrency. }
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%% Import chapters
-
+\listfiles
 \begin{document}
 
 \maybefrontmatter
-
 
 % If you've disabled frontmatter, you can insert the toc manually
 %\tableofcontents\clearpage
