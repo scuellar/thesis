@@ -1,4 +1,4 @@
-\chapter{Making Compcert a \emph{conjunctive} compiler }\label{ch:compcert}
+\chapter{Memory Observable Injectable  Startable Trace simulations of CompCert}\label{ch:compcert}
 
 The simple code in \ref{example:remember} communicates with its environment in two main ways: (1) it takes an address as input and (2) reads from and writes to this location to increment the value stored there.
 \begin{table}\begin{lstlisting}[language=C, numbers=left]
@@ -13,7 +13,7 @@ void incr(void){
 \caption{The function \Ccode{remember} records the address of some buffer, and \Ccode{incr} increments it by one. }
 \label{example:remember}
 \end{table}
-We will see how the specifications of CompCert prevents us from reasoning about such program as compilation units and as external functions, and we will show how to extend the specification of a compiler to lift thees limitations.
+We will see how the specifications of CompCert prevents us from reasoning about such program as compilation units and as external functions, and we will show how to extend the specification of a compiler to lift thesE limitations.
 
 First, CompCert can't give any guarantees about compiling the code in \ref{example:remember} because it is not a complete program. It is reasonable to expect that the function \Ccode{remember} runs safely, given some assumptions (e.g. \Ccode{*p} is a valid address in memory). Unfortunately, CompCert's semantics assumes that a program starts executing with a call to  \Ccode{main()} with no arguments. In fact, the only possible initial states, are characterized by a predicate \Coqcode{initial_state: state -> Prop} that takes no additional arguments. You can see an instantiation of the predicate for Clight in \ref{code:initial_state}. So, even though CompCert correctly compiles the code, it's specification gives no guarantees of any execution other than the one that starts by calling main with no arguments.
 \begin{table}
@@ -27,10 +27,10 @@ Inductive initial_state (p: program): state -> Prop :=
       type_of_fundef f = Tfunction Tnil type_int32s cc_default ->
       initial_state p (Callstate f nil Kstop m0).
 \end{lstlisting}
-\caption{The \Ccode{initial_state} in C and Clight is a call to \Ccode{main}. It also enforces that it takes no arguments (\Coqcode{Tnil}) and returns an integer (\Coqcode{ type_int32s}).}\label{code:initial_state}
+\caption{The \Ccode{initial_state} in C and Clight describes a call to \Ccode{main}. It also enforces that it takes no arguments (\Coqcode{Tnil}) and returns an integer (\Coqcode{ type_int32s}).}\label{code:initial_state}
 \end{table}
 
-Second, CompCert's can't reason about programs that call \Ccode{remember} and \Ccode{incr} because their behavior depends on their internal state (the \Ccode{buff} pointer). CompCert's semantics allows calls to external calls that are assumed to be correct but unfortunately the specification of correctness is too strict, it assumes that the function's behavior is fully determined by (1) the state of memory, (2) the function arguments and (3) the events produced by the function.\footnote{Leroy \cite{Leroy-Compcert-CACM} claims that "inputs given to the programs are uniquely determined by their previous outputs", but this is not exactly correct. A more accurate representation would be to say "inputs given to the programs are uniquely determined by their last outputs". As we will see in \ref{sec:compcert-sim}, it would be much stronger to determine inputs based on all historic outputs.} The execution of \Ccode{incr} also depends on arguments passed to a previous external call (namely, \Ccode{*p} passed to \Ccode{remember}). One could make this explicit in the event trace but CompCert events, shown in \ref{code:oldevents}, can only contain integers, floats or pointers to global variables.
+Second, imagine that the example in \ref{example:remember} describes a system call and CompCert compiles some program that calls \Ccode{incr()}, then the compiler's specification gives no guarantee about the behavior of the compiled code. Indeed, CompCert's semantics allows calls to external functions that are assumed to be correct but, unfortunately, that specification of correctness is too strict; it  assumes that the function's behavior is fully determined by (1) the state of memory, (2) the function arguments and (3) the events produced by the function.\footnote{Leroy \cite{Leroy-Compcert-CACM} claims that "inputs given to the programs are uniquely determined by their previous outputs", but this is not exactly correct. A more accurate representation would be to say "inputs given to the programs are uniquely determined by their last outputs". As we will see in \ref{sec:compcert-sim}, it would be much stronger to determine inputs based on all historic outputs.} The behavior of \Ccode{incr} also depends on the value in \Ccode{buff} (which for system calls will not be in the program's accessible memory), so it is not correct, according to CompCert's specification. Certainly, \Ccode{incr} could expose the pointer stored in \Ccode{buff} as part of its trace but CompCert events, shown in \ref{code:oldevents}, can only contain integers, floats or pointers to global variables.
  
 \begin{table}\centering
 \begin{multicols}{2}
@@ -54,21 +54,24 @@ Inductive eventval: Type :=
 \caption{The events in CompCert}\label{code:oldevents}
 \end{table}
 
-Moreover, in the CompCert semantics, the entire behavior of external functions is bundled into one big step. From looking at an execution internal steps and external function calls are uniform. This consistency is very useful when reasoning about the compilation of the program, where we want to abstract external calls. Nevertheless, when reasoning about a program in a context, it is more useful to replace the big step external calls, with their small step semantics. Regrettably, the specification of CompCert does not even guarantee that the source and target programs call the same external functions. In theory, CompCert could replace an external function call with internal steps as long as they had the same (possibly empty) trace. In practice, obviously, CompCert does not do that, but it is not exposed in its specification.
+Moreover, in the CompCert semantics, the entire behavior of external functions is bundled into one big step. Looking at an execution, internal steps and external function calls are uniform. This consistency is very useful when reasoning about the compilation of the program, where we want to abstract external calls. Nevertheless, when reasoning about a program in a context, it is more useful to replace the big step external calls, with their small step semantics. Regrettably, the specification of CompCert does not even guarantee that the source and target programs call the same external functions. In theory, CompCert could replace an external function call with internal steps as long as they had the same (possibly empty) trace. In practice, obviously, CompCert does not do that, but it is not exposed in its specification.
 
-Finally, the correctness of CompCert is stated as semantic preservation theorem, where the traces are the preserved behavior. The proof of this semantic preservation, uses a forward simulation\footnote{Forward simulation and determinism of the target language implies bisimulation and thus preservation of behavior.}. We find it more convenient to expose this simulation as the specification of the compiler, deriving semantic preservation as a corollary. This way we can easily express the relation between external function calls in source and target, as simulation diagrams. Moreover, we can expose the relation between memories, in source and target. 
+Finally, the correctness of CompCert is stated as semantic preservation theorem, where the traces are the preserved behavior and the proof uses forward simulations\footnote{Forward simulation and determinism of the target language implies bisimulation and thus preservation of behavior.}. At least two other works (\cite{compcomp}, \cite{jiang14:pldi}) have proposed alternative simulations and made the simulations an exposed feature of the compiler's specification. In this papers, the authors view CompCert correctness modularly as a thread-local or module-local simulation and recover a simulation of the global program later. Moreover, from the exposed simulations, they can recover the relation between memories in source and target, another very useful feature in compositional compilers, which seems to be a key feature in compositionally. Following this line of work, we propose to expose the simulation as the specification of the compiler, deriving semantic preservation as a corollary. 
  
-We move, then, to lift this limitations according to the following richer notion of specification  
-\begin{definition}[Conjunctive compiler specification] 
-We say that a compiler's specification is \emph{conjunctive} if it satisfies the following
+We move, then, to lift these limitations according to the following richer notion of specification  
+\begin{definition}[MOIST simulations]
+We say that a compiler's specification uses Memory, Observable, Injectable and Startable Trace (MOIST) simulations if they satisfy the following:
 \begin{itemize}
-\item The execution of a program can start in any of its public functions and all the public functions, including \Ccode{main}, can take arguments.  
-\item The execution trace supports events that can describe changes to memory. Since memory may be rearranged through compilation, wee call these \emph{memory events}.
-\item There are functions \Coqcode{at_external} and \Coqcode{after_external} that describe states before and after external calls. \Coqcode{at_external} extracts the external function being called and its arguments. \Coqcode{after_external} constructs the state after the external function executes. Also, source and target languages operate over the same memory and the memory can be separated by \Coqcode{get_mem} function. We call these \emph{exposed semantics}.
-\item The correctness of the compiler is stated as a forward simulation and the semantic preservation derive as a corollary. The forward simulations preserve external function calls and exposes the relation between source and target memories, throughout the execution. We call this an \emph{exposed simulation}. 
+\item Memory: All intermediate languages have a unified memory model \Coqcode{mem}, and each language $L_1$ has a function \Coqcode{get_mem: state L\_1 -> mem}, that exposes the memory of a state. The simulation describes the relation between memories before and after compilation.  
+\item Observable: Similarly, all intermediate languages are outfitted with a function \Coqcode{at_external} that identifies states about to make an external function call. For every language $L_1$, \Coqcode{at_external: state L_1 -> option (f_ext, args)} returns the external function being called and its arguments. The simulation preserves external calls. 
+\item Injectable: The execution trace supports events that can describe locations in memory (i.e., pointers). Compilation may rearrange memory, which CompCert describes as an \emph{injections}, so the trace will be preserved up to these injections. The simulation shows that the injection relating traces in source and target executions is the same injection that relates their memory. We call these new events \emph{memory events}.
+\item Startable: The execution of a program can start in any of its public functions, including \Ccode{main}, taking arguments.  
+
+%\item The correctness of the compiler is stated as a forward simulation and the semantic preservation derive as a corollary. The forward simulations preserve external function calls and exposes the relation between source and target memories, throughout the execution. We call this an \emph{exposed simulation}. 
 \end{itemize}
 \end{definition}
-
+It is worth noting that, even though we require a unified memory model, in practice, a language can use a different memory model (or none at all) as long as they can construct a memory from their state with \Coqcode{get_mem}. In practice all CompCert languages use the same memory model, described in \ref{sec:mem}, which we will refer as \Coqcode{mem} from now on.
+Nevertheless, a future language could use \emph{juicy memory} as in \cite{appel14:plcc} or abstract state in \cite{Ronghui15abstractionlayers} since a \Coqcode{mem} can be derived from them. 
 
 \begin{table}
 \centering
@@ -83,7 +86,7 @@ We say that a compiler's specification is \emph{conjunctive} if it satisfies the
 \caption{Percentage change to CompCert: changes are calculated from the number of lines added as given by running \Ccode{git diff} between our version of CompCert and the master branch. For each feature, an estimated percent is provided. }\label{tab:prcntchange}
 \end{table}
 
-In the rest of the chapter, we describe how we have improved the specification of CompCert to make it conjunctive. We first describe how to generalize \Coqcode{initial_state} to accept functions with arguments and other than main. Second we describe how to add memory events to CompCert. Then we show how to easily define exposed semantics for every language in CompCert and finally we show how to define and prove exposed simulations.  
+In the rest of the chapter, we describe how we develop MOIST specifications for CompCert. We first describe how to generalize \Coqcode{initial_state} to make the simulations Startable. Second we describe how to add memory events to CompCert. Then we show how to extend the semantics for every language in CompCert to include and \Coqcode{at_external} function and, finally, we show how to put everything together in MOIST simulations for CompCert.  
 
 The changes described here represent only a x\% %TODO
 change to CompCert, as measured by running \Coqcode{git diff} in CompCert before and after our changes. The amount changed for every feature proposed is described in Table \ref{tab:prcntchange}.

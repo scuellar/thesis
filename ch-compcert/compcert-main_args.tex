@@ -1,11 +1,13 @@
 \section{Passing arguments to main.}\label{sec:premain}
 
-CompCert can compile programs where \Ccode{main} takes arguments, but its correctness theorem gives no guarantees about their translation. That is because it's semantic model assumes that \Ccode{main} takes no arguments (See \ref{code:initial_state}), but real C programs can take up to two arguments \Ccode{argc} (argument count) and \Ccode{argv} (argument vector). Also, all execution is the semantics of CompCert start with a call to \Ccode{main()}, but \Ccode{main} is nothing but an agreed upon term for startup code. Furthermore, the semantics assumes that the initial memory contains only the global environments. In this section we define a new predicate \Coqcode{entry_point}, generalizing \Coqcode{initial_state}, which accepts any public function, including those with arguments. The predicate also admits other memories containing, for example, the stack of other processes. 
+CompCert can compile programs where \Ccode{main} takes arguments, but its correctness theorem gives no guarantees about their translation. That is because its semantic model assumes that \Ccode{main} takes no arguments (See \ref{code:initial_state}); but real C programs can take up to two arguments \Ccode{argc}, the argument count, and \Ccode{argv}, the argument vector %(and \Ccode{envp}, the global environment)
+. Also, all executions, in the semantics of CompCert start with a call to \Ccode{main()}, even though \Ccode{main} is nothing but an agreed upon term for startup. We need to generalize this to any function, not just main(). In this section we define a new predicate \Coqcode{entry_point}, generalizing \Coqcode{initial_state} (\ref{code:initial_state}), that characterizes starting states which includes calls to \Ccode{main} with arguments and calls to any other function.
 
-Passing arguments to main is of general interest and particularly important for our work with concurrency. Spawning new threads behaves very similar to starting a program by calling \Ccode{main}: The library function that spawns a new thread \Ccode{f} (e.g. \Ccode{pthread_create}) must create a new stack, push the arguments to stack and then call \Ccode{f} just like a program startup (which calls \Ccode{_start()} and \Ccode{__libc_start_main()}). Our new predicate \Coqcode{entry_point} is general enough to capture this two types of preprocessing.
-Notice that if we restricted our semantics to spawning threads whit no arguments, threads wouldn't be able to share pointers and thus they would all execute in disjoint pieces of memory with no communication. That would be a much easier and less interesting result. 
+Passing arguments to main is of particularly important for our work with concurrency because spawning new threads behaves very similar to starting a program by calling \Ccode{main}: The library function that spawns a new thread (e.g. \Ccode{pthread_create}) must create a new stack, push the arguments to stack and then call \Ccode{foo} just like a program initialization would do. The predicate \Coqcode{entry_point} is general enough to capture these two types of preprocessing. In fact, the new predicate can describe executions starting with any kind of preprocessing that follows the appropriate calling convention.
 
-Now that we defined a new starting point for executions, we must prove that compilation preserves the predicate \Coqcode{entry_point} in the same way that CompCert's simulation preserves \Coqcode{initial_state}. The proof largely follows the simulation of internal function calls which is already proven in CompCert, so we omit the details here. 
+It is worth pointing out how important it is to allow newly spawned functions to take arguments. If we restricted our semantics to spawning threads with no arguments, threads wouldn't be able to share pointers (or would have to do it clumsily through global variables) and thus they would all execute in disjoint pieces of memory with no communication. That would be a much easier and less interesting result. 
+
+Once we define a new starting point for executions, we must prove that compilation preserves the predicate \Coqcode{entry_point} (\ref{table:initial_sim}(b)) in the same way that CompCert's simulation preserves \Coqcode{initial_state}(\ref{table:initial_sim}(a)). The proof largely follows the simulation of internal function calls which is already proven in CompCert, so we omit the details here. 
 
 \begin{table}\centering
 \begin{multicols}{2}\begin{tikzcd}[column sep=tiny]
@@ -27,19 +29,100 @@ s_1 & \widesim{} & s_2
 \caption{Entry simulation diagrams. (a) if $s_1$ is an initial state for the source program, then there exists some state $s_2$ that is related to $s_1$ and is an initial state for the compiled program. (b) Just like the diagram for initial states, but it generalizes and exposes the initial memory $m_0$, the entry function $f$ and the arguments \Coqcode{args}. The entire simulation is parametric on the realation $\sim$.}\label{table:initial_sim}
 \end{table}
 
-\subsection{Simulating initialization preprocessing.}
-Before \Ccode{main} ever starts executing, there is an initialization process that sets up the stack and the registers, before main is executed. The preprocessing function(s) often called \Ccode{_start}, \Ccode{premain} or \Ccode{startup}, will create a stack, set up the arguments in the stack or in registers, set up the environment (\Ccode{envp}), set up the return address (a call to \Ccode{exit()}), and other bookkeeping. 
+\subsection{The prestack}
 
 
-One of the difficulty in simulating the initialization is that, in architectures such as $x86$ in $32$-bit mode, all arguments are passed in memory. As the comments in the CompCert code would put it "Snif!"\cite{leroy19:compcert}. Even architectures that allow argument passing in registers, such as $x86$ in $64$-bit mode, have a limited number of registers and will pass arguments on the stack after those run out. This "pre-stack", that contains the arguments, does not correspond to any function in the call stack of the program; it corresponds to the stack frame of \Ccode{_start()}, which is part of the linked program.
+\begin{table}\centering
+\begin{multicols}{3}
+\vspace*{\fill}
+\begin{drawstacknoends}
+%\llcell{1}{highlight}{Stack frame for main}
+\startframe
+\cell{\Ccode{argc}}
+\cell{\Ccode{&argv}} \cellref{argv ptr}
+\cell{\Ccode{&envp}}\cellref{envp ptr}
+%\rightpoints[<->]{argv}{envp}
+\padding{1}{...}
+\llcell{2}{freecell}{argv}\cellref{argv}
+\leftpoints{argv ptr}{argv}
+\llcell{2}{highlight}{envp}\cellref{envp}
+\rightpoints{envp ptr}{envp}
+\finishframe{Stack created \Ccode{exec} }
+\end{drawstacknoends}
+(a) Stack after calling \Ccode{exec()} to run a C program.
 
-Our generic predicate \Coqcode{entry_points: mem -> state -> val -> list val -> Prop} takes a memory \Coqcode{m}, a state \Coqcode{s}, a pointer to the entry function \Coqcode{fun_ptr} of type \Coqcode{val}, and a list of arguments \Coqcode{args}. This predicate is language dependent, but it generally has three parts:
+\
+
+\columnbreak
+
+\vspace*{\fill}
+
+\begin{drawstacknotop}
+\llcell{1}{freecell}{Stack frame for main}
+\startframe
+\cell{return address}
+\cell{\Ccode{argc}}
+\cell{\Ccode{&argv}}
+\cell{\Ccode{&envp}}
+\bcell{...}
+\finishframe{\Ccode{_libc_start_main}}
+\startframe
+\padding{2}{...}
+\finishframe{\Ccode{_start}}
+\end{drawstacknotop}
+(b) Stack after calling \Ccode{_start()} to start main. 
+
+\ 
+
+\columnbreak
+
+\vspace*{\fill}
+\begin{drawstacknoends}
+\llcell{2}{freecell}{Stack frame for \Ccode{foo}}
+\startframe
+\cell{return address}
+\cell{arg}
+\padding{2}{...}
+\finishframe{\Ccode{pthread_create} }
+\end{drawstacknoends}
+
+\
+
+(c) Stack after calling \Ccode{pthread_create()} to start a thread with function \Ccode{foo}. 
+
+\end{multicols}
+\caption{Prestacks: stacks created before the entry function executes. (a) Stack after calling \Ccode{main()}, directly from a systemcall. \Ccode{envp} and the stackframe fro \Ccode{main} (highlighted in red) are the only parts of this stack modeled by CompCert's semantics. (b) Stack shape when calling main indirectly through \Ccode{_start()}. (c) Stack right before a function \Ccode{foo} is executed in a new thread.}\label{table:premain_stacks}
+\end{table}
+
+When execution starts, CompCert semantics assumes that the memory contains only the global variables. In reality, when \Ccode{main} starts executing, there is much more content already pushed in the stack, content that we call the \emph{prestack}. 
+
+ When an operating system creates a new process in which to run a C program, before main ever starts executing, the operating systems \Ccode{exec} procedure, sets up the stack and the registers, before \main is executed, as shown in \ref{table:premain_stacks}(a). At this point the stack also contains the \Ccode{NULL}-terminated argument vector, the argument count \Ccode{argc}, pointers to the arguments and the global environment, and possibly more variables such as linker variable. Once that is done, the OS does not (in fact) invoke main, it invokes a "pre-main" function \Ccode{_start()} (sometimes called \Ccode{premain} or \Ccode{startup}), which does things like aligning the stackframe adequately and setting a final call to exit the process. In such a case, the prestack has even more things, as seen in \ref{table:premain_stacks}(b). 
+
+Our new predicate \Coqcode{entry_point} describes the prestack more accurately by (1) describing how arguments are set up in the prestack and (2) allowing memory to have arbitrary garbage. This extra contents of memory can be unused parts of the prestack, stacks of other threads, or anything else.   
+
+%
+%If \main 
+%is invoked through a system call (e.g., \Ccode{execve}), as shown in \ref{table:premain_stacks}(a), the prestack contain the argument vector (if there are no arguments, it has a single element with a \Ccode{NULL} pointer), the argument count \Ccode{argc}, pointers to the arguments and the global environment, and possibly more variables such as linker variable. 
+%
+%The more common way to execute \Ccode{main} is to starts with an initialization routine, calling a function such as 
+%
+%Before \Ccode{main} ever starts executing, there is an initialization process that sets up the stack and the registers, before main is executed. The preprocessing function(s) often called \Ccode{_start}, \Ccode{premain} or \Ccode{startup}, will create a stack, set up the arguments in the stack or in registers, set up the environment (\Ccode{envp}), set up the return address (a call to \Ccode{exit()}), and other bookkeeping. 
+
+As mentioned before, spawning a thread behaves like executing \main in many way. For instance, the stack of a thread before the first function executes looks just like a prestack, as shown in \ref{table:premain_stacks}(c). Indeed, when \Ccode{pthread_create} creates a new process, it sets sets up the stack according to the system's calling convention, right before calling the spawned function. The characterization of the prestack in \Coqcode{entry_point} is general enough to cover this case too.
+
+Reasoning about the prestack is hard because it's the only part in the stack that does not correspond to any function in the call stack of the program; it may corresponds to the stack frame of \Ccode{_start()}, which is part of the linked program. Since compilation might rearrange memory, we must be very careful about how the prestack is transformed. If only we could pass all arguments on registers, we wouldn't need to reason about the prestack. 
+Unfortunately, in architectures such as $x86$ in $32$-bit mode, all arguments are passed on the stack. As the comments in the CompCert code put it "Snif!"\cite{leroy19:compcert}. Even architectures that allow argument passing in registers, such as $x86$ in $64$-bit mode, have a limited number of registers and will pass arguments on the stack after those run out. If we want to allow \main to take arguments, we must describe the prestack.
+
+The  characterization of the prestack is language dependent, and it will be described more carefully in the next subsection (\ref{sec:entry_point}).
+
+\subsection{The \Ccode{entry_point}: a more permisive starting state}\label{sec:entry_point}
+The predicate \Coqcode{entry_point: mem -> state -> val -> list val -> Prop} takes an initial memory \Coqcode{m}$_0$ (with the prestack), an initial state \Coqcode{s}, a pointer to the entry function \Coqcode{fun_ptr} of type \Coqcode{val}, and a list of arguments \Coqcode{args}. This predicate is language dependent, but its divided in three parts:
 \begin{enumerate}
-\item Checks that memory is well-formed. That is, it contains no ill-formed pointers to invalid memory. CompCert generally maintains that well-formed programs don't create dangling pointers.\footnote{A well-formed program, should not compare, read or write to invalid pointers. Hence, dangling pointers behave semantically as undefined values and could be modeled that way.}
-\item Arguments are well-formed. Among other things, they have the right types for the function being called, they have no ill-formed pointers, and fit in the stack. 
-\item Global environment is allocated correctly. This makes sure that the environment is in memory and that the function is declared as a public in the environment.
+\item Checks that memory  \Coqcode{m}$_0$ is well formed. That is, it contains no ill-formed pointers to invalid addresses. CompCert generally maintains that well-formed programs don't create dangling pointers.\footnote{A well-formed program, should not compare, read or write to invalid pointers. Hence, dangling pointers behave semantically as undefined values and could be modeled that way.}
+\item Checks that arguments are well-formed. Among other things, they have the right types for the function being called, they have no ill-formed pointers, and fit in the stack. 
+\item Checks that the global environment \Coqcode{genv} is allocated correctly. It also makes sure that the pointer \Coqcode{fun_ptr} points to a function in \Coqcode{genv}.
 \end{enumerate}
-In the rest of this section, we explore the definition of \Coqcode{entry_points} for different languages and show how we prove that different CompCert phases preserve the predicate.
+In the rest of this section, we explore the definition of \Coqcode{entry_points} for different languages and, when interesting, we explain how we prove that different CompCert passes preserve the predicate as in \ref{table:initial_sim}(b).
 
 \subsubsection{C frontend}
 All of the C-like languages (\emph{Clight, Csharp, Csharpminor}) have similar \Coqcode{entry_point}, so we present here the one for Clight in \ref{code:entry_point_Clight}.
