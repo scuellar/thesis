@@ -1,13 +1,13 @@
 \section{Passing arguments to main.}\label{sec:premain}
 
-CompCert can compile programs where \Ccode{main} takes arguments, but its correctness theorem gives no guarantees about their translation. That is because its semantic model assumes that \Ccode{main} takes no arguments (See \ref{code:initial_state}); but real C programs can take up to two arguments \Ccode{argc}, the argument count, and \Ccode{argv}, the argument vector %(and \Ccode{envp}, the global environment)
-. Also, all executions, in the semantics of CompCert start with a call to \Ccode{main()}, even though \Ccode{main} is nothing but an agreed upon term for startup. We need to generalize this to any function, not just main(). In this section we define a new predicate \Coqcode{entry_point}, generalizing \Coqcode{initial_state} (\ref{code:initial_state}), that characterizes starting states which includes calls to \Ccode{main} with arguments and calls to any other function.
+CompCert can compile programs where \Ccode{main} takes arguments, but its correctness theorem gives no guarantees about their translation. That is because its semantic model assumes that \Ccode{main} takes no arguments (See \autoref{code:initial_state}); but real C programs can take up to two arguments \Ccode{argc}, the argument count, and \Ccode{argv}, the argument vector %(and \Ccode{envp}, the global environment)
+. Also, all executions, in the semantics of CompCert start with a call to \Ccode{main()}, even though \Ccode{main} is nothing but an agreed upon term for startup. We need to generalize this to any function, not just main(). In this section we define a new predicate \Coqcode{entry_point}, generalizing \Coqcode{initial_state} (\autoref{code:initial_state}), that characterizes starting states which includes calls to \Ccode{main} with arguments and calls to any other function.
 
 Passing arguments to main is of particularly important for our work with concurrency because spawning new threads behaves very similar to starting a program by calling \Ccode{main}: The library function that spawns a new thread (e.g. \Ccode{pthread_create}) must create a new stack, push the arguments to stack and then call \Ccode{foo} just like a program initialization would do. The predicate \Coqcode{entry_point} is general enough to capture these two types of preprocessing. In fact, the new predicate can describe executions starting with any kind of preprocessing that follows the appropriate calling convention.
 
 It is worth pointing out how important it is to allow newly spawned functions to take arguments. If we restricted our semantics to spawning threads with no arguments, threads wouldn't be able to share pointers (or would have to do it clumsily through global variables) and thus they would all execute in disjoint pieces of memory with no communication. That would be a much easier and less interesting result. 
 
-Once we define a new starting point for executions, we must prove that compilation preserves the predicate \Coqcode{entry_point} (\ref{table:initial_sim}(b)) in the same way that CompCert's simulation preserves \Coqcode{initial_state}(\ref{table:initial_sim}(a)). The proof largely follows the simulation of internal function calls which is already proven in CompCert, so we omit the details here. 
+Once we define a new starting point for executions, we must prove that compilation preserves the predicate \Coqcode{entry_point} (\autoref{table:initial_sim}(b)) in the same way that CompCert's simulation preserves \Coqcode{initial_state} (\autoref{table:initial_sim}(a)). The proof largely follows the simulation of internal function calls which is already proven in CompCert, so we omit the details here. However, some interesting relevant details are presented later in \autoref{sec:entry_point}.
 
 \begin{table}\centering
 \begin{multicols}{2}\begin{tikzcd}[column sep=tiny]
@@ -29,48 +29,45 @@ s_1 & \widesim{} & s_2
 \caption{Entry simulation diagrams. (a) if $s_1$ is an initial state for the source program, then there exists some state $s_2$ that is related to $s_1$ and is an initial state for the compiled program. (b) Just like the diagram for initial states, but it generalizes and exposes the initial memory $m_0$, the entry function $f$ and the arguments \Coqcode{args}. The entire simulation is parametric on the realation $\sim$.}\label{table:initial_sim}
 \end{table}
 
-\subsection{The prestack}
+\subsection{The prestack and the initial memory}
+
+When execution starts, CompCert semantics assumes that the stack is empty and the memory contains only the global variables. However, in reality, when \Ccode{main} starts executing, there is more content already pushed in the stack and in memory that is particularly important to argument passing. Part of the \Coqcode{entry_point} predicate is to describe this initial state of memory, as we describe bellow.
+
+Let's take, as an example, the moment \main is called from the initialization function \Ccode{_libc_start_main}. At this point the top of the stack will contain the return address and the arguments to \main (that are not passed in registers). We call \emph{prestack} that tip of the stack, depicted in \autoref{table:premain_stacks}(a), which is relevant to the execution of \main. The rest of the memory, at that point, also contains the \Ccode{NULL}-terminated argument vector, all the global variables, and possibly stacks of other initialization functions such as \Ccode{start}. We call the entire memory at this point the \emph{initial memory}. 
 
 
 \begin{table}\centering
-\begin{multicols}{3}
+\begin{multicols}{2}
+%\vspace*{\fill}
+%\begin{drawstacknoends}
+%%\llcell{1}{highlight}{Stack frame for main}
+%\startframe
+%\cell{\Ccode{argc}}
+%\cell{\Ccode{argv}} 
+%\cell{\Ccode{envp}}
+%\stackbottom[padding]
+%\finishframe{Stack created \Ccode{exec} }
+%\end{drawstacknoends}
+%(a) Stack after calling \Ccode{exec()} to run a C program.
+%
+%\
+%
+%\columnbreak
+
 \vspace*{\fill}
+
 \begin{drawstacknoends}
-%\llcell{1}{highlight}{Stack frame for main}
-\startframe
-\cell{\Ccode{argc}}
-\cell{\Ccode{&argv}} \cellref{argv ptr}
-\cell{\Ccode{&envp}}\cellref{envp ptr}
-%\rightpoints[<->]{argv}{envp}
-\padding{1}{...}
-\llcell{2}{freecell}{argv}\cellref{argv}
-\leftpoints{argv ptr}{argv}
-\llcell{2}{highlight}{envp}\cellref{envp}
-\rightpoints{envp ptr}{envp}
-\finishframe{Stack created \Ccode{exec} }
-\end{drawstacknoends}
-(a) Stack after calling \Ccode{exec()} to run a C program.
-
-\
-
-\columnbreak
-
-\vspace*{\fill}
-
-\begin{drawstacknotop}
 \llcell{1}{freecell}{Stack frame for main}
-\startframe
+%\startframe
 \cell{return address}
 \cell{\Ccode{argc}}
-\cell{\Ccode{&argv}}
-\cell{\Ccode{&envp}}
-\bcell{...}
-\finishframe{\Ccode{_libc_start_main}}
-\startframe
-\padding{2}{...}
-\finishframe{\Ccode{_start}}
-\end{drawstacknotop}
-(b) Stack after calling \Ccode{_start()} to start main. 
+\cell{\Ccode{argv}} 
+\cell{\Ccode{envp}}
+\cell{\Ccode{esp}}
+%\finishframe{\Ccode{_libc_start_main}}
+\stackbottom[padding]
+\end{drawstacknoends}\newline
+(a) Stack at the start of \main. 
 
 \ 
 
@@ -79,53 +76,51 @@ s_1 & \widesim{} & s_2
 \vspace*{\fill}
 \begin{drawstacknoends}
 \llcell{2}{freecell}{Stack frame for \Ccode{foo}}
-\startframe
+%\startframe
 \cell{return address}
 \cell{arg}
-\padding{2}{...}
-\finishframe{\Ccode{pthread_create} }
-\end{drawstacknoends}
-
-\
-
-(c) Stack after calling \Ccode{pthread_create()} to start a thread with function \Ccode{foo}. 
+\cell{\Ccode{esp}}
+\stackbottom[padding]
+%\finishframe{\Ccode{pthread_create} }
+\end{drawstacknoends}\newline
+(b) Stack created  \Ccode{pthread_create()} to start a thread running \Ccode{foo}. 
 
 \end{multicols}
-\caption{Prestacks: stacks created before the entry function executes. (a) Stack after calling \Ccode{main()}, directly from a systemcall. \Ccode{envp} and the stackframe fro \Ccode{main} (highlighted in red) are the only parts of this stack modeled by CompCert's semantics. (b) Stack shape when calling main indirectly through \Ccode{_start()}. (c) Stack right before a function \Ccode{foo} is executed in a new thread.}\label{table:premain_stacks}
+\caption{Prestacks example for \Ccode{X86} in 32bit mode: examples of stacks created before the entry function executes. (a) Stack shape right before main executes. (b) Stack right before a function \Ccode{foo} is executed in a new thread. Notice that in 64bit mode, the arguments will be passed in registers. }\label{table:premain_stacks}
 \end{table}
 
-When execution starts, CompCert semantics assumes that the memory contains only the global variables. In reality, when \Ccode{main} starts executing, there is much more content already pushed in the stack, content that we call the \emph{prestack}. 
 
- When an operating system creates a new process in which to run a C program, before main ever starts executing, the operating systems \Ccode{exec} procedure, sets up the stack and the registers, before \main is executed, as shown in \ref{table:premain_stacks}(a). At this point the stack also contains the \Ccode{NULL}-terminated argument vector, the argument count \Ccode{argc}, pointers to the arguments and the global environment, and possibly more variables such as linker variable. Once that is done, the OS does not (in fact) invoke main, it invokes a "pre-main" function \Ccode{_start()} (sometimes called \Ccode{premain} or \Ccode{startup}), which does things like aligning the stackframe adequately and setting a final call to exit the process. In such a case, the prestack has even more things, as seen in \ref{table:premain_stacks}(b). 
+% When an operating system creates a new process in which to run a C program, before main ever starts executing, the operating systems \Ccode{exec} procedure, sets up the stack, the memory and the registers, before \main is executed. The stack, at this point, contains \Ccode{argc}, \Ccode{argv} and \Ccode{envp} as depicted in \autoref{table:premain_stacks}(a). The memory at this point also contains the \Ccode{NULL}-terminated argument vector, all the global variables and possibly more variables such as linker variable. Once that is done, the OS does not (in fact) invoke main, it invokes a function such as \Ccode{_start()} (sometimes \Ccode{premain} or \Ccode{startup}), which does things like aligning the stack and setting a final call to exit the process. In such a case, the prestack has even more things, as seen in \autoref{table:premain_stacks}(b). 
 
-Our new predicate \Coqcode{entry_point} describes the prestack more accurately by (1) describing how arguments are set up in the prestack and (2) allowing memory to have arbitrary garbage. This extra contents of memory can be unused parts of the prestack, stacks of other threads, or anything else.   
+Our new predicate \Coqcode{entry_point}, instead of an empty stack, describes how arguments are set up in the prestack and, instead of an almost empty initial memory, allows memories to have arbitrary things. This extra contents of memory can be the argument vector, stacks of other functions, stacks of other threads, or anything else.   
 
 %
 %If \main 
-%is invoked through a system call (e.g., \Ccode{execve}), as shown in \ref{table:premain_stacks}(a), the prestack contain the argument vector (if there are no arguments, it has a single element with a \Ccode{NULL} pointer), the argument count \Ccode{argc}, pointers to the arguments and the global environment, and possibly more variables such as linker variable. 
+%is invoked through a system call (e.g., \Ccode{execve}), as shown in \autoref{table:premain_stacks}(a), the prestack contain the argument vector (if there are no arguments, it has a single element with a \Ccode{NULL} pointer), the argument count \Ccode{argc}, pointers to the arguments and the global environment, and possibly more variables such as linker variable. 
 %
 %The more common way to execute \Ccode{main} is to starts with an initialization routine, calling a function such as 
 %
 %Before \Ccode{main} ever starts executing, there is an initialization process that sets up the stack and the registers, before main is executed. The preprocessing function(s) often called \Ccode{_start}, \Ccode{premain} or \Ccode{startup}, will create a stack, set up the arguments in the stack or in registers, set up the environment (\Ccode{envp}), set up the return address (a call to \Ccode{exit()}), and other bookkeeping. 
 
-As mentioned before, spawning a thread behaves like executing \main in many way. For instance, the stack of a thread before the first function executes looks just like a prestack, as shown in \ref{table:premain_stacks}(c). Indeed, when \Ccode{pthread_create} creates a new process, it sets sets up the stack according to the system's calling convention, right before calling the spawned function. The characterization of the prestack in \Coqcode{entry_point} is general enough to cover this case too.
+As mentioned before, spawning a thread behaves like executing \main in many ways. For instance, the stack of a thread before the first function executes looks just like a prestack before calling main, as shown in \autoref{table:premain_stacks}(b). Indeed, when \Ccode{pthread_create} starts a new thread, it sets up the stack to pass arguments to the spawned function. The initial memory, at this point, contains the stacks of other threads and all other memory used by their executions. \Coqcode{entry_point} is general enough to characterize this prestack and initial memory too.
 
-Reasoning about the prestack is hard because it's the only part in the stack that does not correspond to any function in the call stack of the program; it may corresponds to the stack frame of \Ccode{_start()}, which is part of the linked program. Since compilation might rearrange memory, we must be very careful about how the prestack is transformed. If only we could pass all arguments on registers, we wouldn't need to reason about the prestack. 
-Unfortunately, in architectures such as $x86$ in $32$-bit mode, all arguments are passed on the stack. As the comments in the CompCert code put it "Snif!"\cite{leroy19:compcert}. Even architectures that allow argument passing in registers, such as $x86$ in $64$-bit mode, have a limited number of registers and will pass arguments on the stack after those run out. If we want to allow \main to take arguments, we must describe the prestack.
+%Reasoning about the prestack is hard because it's the only part in the stack that does not correspond to any function in the call stack of the program; it may corresponds to the stack frame of \Ccode{_start()}, which is part of the linked program. Since compilation might rearrange memory, we must be very careful about how the prestack is transformed. 
+If only we could pass all arguments on registers, we wouldn't need to reason about the prestack at all. 
+Unfortunately, in architectures such as $x86$ in $32$-bit mode, all arguments are passed on the stack. As the comments in the CompCert code put it "Snif!"\cite{leroy19:compcert}. Even architectures that allow argument passing in registers, such as $x86$ in $64$-bit mode, have a limited number of registers and will pass arguments on the stack after those run out. Consequently, if we want describe argument passing for entry functions in general, we must describe the prestack.
 
-The  characterization of the prestack is language dependent, and it will be described more carefully in the next subsection (\ref{sec:entry_point}).
+The  characterization of the prestack is language dependent, and it will be described more carefully in the next subsection. % (\autoref{sec:entry_point}).
 
 \subsection{The \Ccode{entry_point}: a more permisive starting state}\label{sec:entry_point}
-The predicate \Coqcode{entry_point: mem -> state -> val -> list val -> Prop} takes an initial memory \Coqcode{m}$_0$ (with the prestack), an initial state \Coqcode{s}, a pointer to the entry function \Coqcode{fun_ptr} of type \Coqcode{val}, and a list of arguments \Coqcode{args}. This predicate is language dependent, but its divided in three parts:
+The predicate \Coqcode{entry_point: mem -> state -> val -> list val -> Prop} takes an initial memory \Coqcode{m}$_0$, an initial state \Coqcode{s}, a pointer to the entry function \Coqcode{fun_ptr} of type \Coqcode{val}, and a list of arguments \Coqcode{args}. This predicate is language dependent, but its divided in three parts:
 \begin{enumerate}
-\item Checks that memory  \Coqcode{m}$_0$ is well formed. That is, it contains no ill-formed pointers to invalid addresses. CompCert generally maintains that well-formed programs don't create dangling pointers.\footnote{A well-formed program, should not compare, read or write to invalid pointers. Hence, dangling pointers behave semantically as undefined values and could be modeled that way.}
-\item Checks that arguments are well-formed. Among other things, they have the right types for the function being called, they have no ill-formed pointers, and fit in the stack. 
 \item Checks that the global environment \Coqcode{genv} is allocated correctly. It also makes sure that the pointer \Coqcode{fun_ptr} points to a function in \Coqcode{genv}.
+\item Checks that memory  \Coqcode{m}$_0$ is well formed. That is, it contains no ill-formed pointers to invalid addresses. CompCert generally maintains that well-formed programs don't create dangling pointers.\footnote{A well-formed program, should not compare, read or write to invalid pointers. Hence, dangling pointers behave semantically as undefined values and could be modeled that way.}
+\item Checks that arguments are well-formed. Among other things, they have the right types for the function being called, they have no ill-formed pointers, they fit in the stack and they correspond to the prestack.  
 \end{enumerate}
-In the rest of this section, we explore the definition of \Coqcode{entry_points} for different languages and, when interesting, we explain how we prove that different CompCert passes preserve the predicate as in \ref{table:initial_sim}(b).
+In the rest of this section, we explore the definition of \Coqcode{entry_points} for different languages and, when interesting, we explain how we prove that different CompCert passes preserve the predicate as in \autoref{table:initial_sim}(b).
 
 \subsubsection{C frontend}
-All of the C-like languages (\emph{Clight, Csharp, Csharpminor}) have similar \Coqcode{entry_point}, so we present here the one for Clight in \ref{code:entry_point_Clight}.
+All of the C-like languages (\emph{Clight, Csharp, Csharpminor}) have similar \Coqcode{entry_point}, so we present here the one for Clight in \autoref{code:entry_point_Clight}.
 %\lstset{moredelim=*[s][\color{green}]{Inductive}{' '}} %playing arounds
 \begin{table}
 \begin{lstlisting}[ numbers=left]
@@ -145,19 +140,57 @@ Inductive entry_point (ge:genv): mem -> state -> val -> list val -> Prop :=
 \end{lstlisting}
 \caption{The \Ccode{entry_point} predicate in Clight}\label{code:entry_point_Clight}
 \end{table}
-Lines 4-6 ensure that the environment is allocated in memory and it contains the function \Coqcode{f} with the right type signature. Line 7 states that the initial memory has no dangling pointers. Lines 8-11 say that the arguments have the right type and have no dangling pointers. The predicate \Coqcode{bounded-args}, enforces that the arguments fit in the stack, which is architecture dependent. It is reasonable to replace this with a small enough bound that fits all architectures, like $4$, but we keep it general here. Finally, the entry state, in line 13, is defined as a call to \Coqcode{f} with an empty continuation.
+Lines 4-6 ensure that the environment is allocated in memory and it contains the function \Coqcode{f} with the right type signature. Line 7 states that the initial memory has no dangling pointers. Lines 8-11 say that the arguments have the right type and have no dangling pointers. The predicate \Coqcode{bounded-args}, enforces that the arguments fit in the stack, which is architecture dependent (generally around 1 Gigabyte). Finally, the entry state, in line 13, is defined as a call to \Coqcode{f} with an empty continuation.
 
-Our empty continuation \Coqcode{Kstop} takes \Coqcode{targs} as an argument. That is because continuations also represent the call stack; \Coqcode{Kstop targs} represents the "pre-stack" of \Ccode{_start()} that might contain some arguments for \Coqcode{f}.
+The prestack, is implicitly determined by \Coqcode{Kstop targs} since, from the types of the arguments, we can determine the shape of the prestack. In \Coqcode{Clight}, the continuation describes the program's call stack with \Coqcode{Kcall} describing a stackframe and \Coqcode{Kstop} describing the end of the stack. In our version, \Coqcode{Kstop targs} describes the prestack instead, which is the last frame. Through compilation, \Coqcode{Kcall} gets translated to a predicate \Coqcode{Stackframe} that describes a stack frame. Similarly, \Coqcode{Kstop} will be translated to \Coqcode{Prestack}, a special kind of \Coqcode{Stackframe}, as depicted in \ref{fig:Kstop_compile}.
+
+\newcolumntype{L}{>{\centering\arraybackslash}m{3.5cm}}
+
+\begin{figure}
+\begin{tabular}{ l L c L c L }
+  (a) & $\text{\Coqcode{Kcall}}$&$  \longrightarrow  $&$\text{\Coqcode{Stackframe}}  $&$\longrightarrow$ & 
+  \scalebox{0.50}{
+\begin{drawstacknoends}%\startframe
+\stacktop{}[padding]
+\llcell{2}{freecell}{Stack frame}
+%\finishframe{\Ccode{_libc_start_main}}
+\stackbottom[padding]
+\end{drawstacknoends}
+} \\
+  (b) & $\text{\Coqcode{Kstop}}$&$  \longrightarrow $&$ \text{\Coqcode{Prestack}}  $&$\longrightarrow$ & 
+\scalebox{0.50}{
+\begin{drawstacknoends}%\startframe
+\stacktop{}[padding]
+\llcell{2}{freecell}{prestack}
+\end{drawstacknoends}
+} \\
+& Continuations in C-like languages  & & Stack frame descriptions in low level languages & & Stack frames in memory for Mach and Asm
+\end{tabular}
+
+%\begin{tikzcd}[column sep=tiny]
+%%\arrow[d, "\text{entry\_points } m_0 \ f \ \text{args}"'] &  &  \arrow[d, dotted,  "\text{entry\_points } m_0 \ f \ \text{args}"] \\
+%\text{(a)}&\text{\Coqcode{Kcall}} & \longrightarrow & \text{\Coqcode{Stackframe}} & \longrightarrow \\
+%\text{(b)}&\text{\Coqcode{Kstop targs}} & \longrightarrow & \text{\Coqcode{Prestack}} & \longrightarrow  \\
+%%\text{C-like languages} & & \text{Register transfer languages} & & \text{low level languages} \\
+%\end{tikzcd}
+
+
+\caption{Abstractions of stack frames become more concrete through compilation. (a) \Coqcode{Kcall} is a high level abstractions of stackframes for C-like languages. It gets translated to \Coqcode{Stackframes}, which are low level descriptions of stack frames. Finally the stack is laid in memory. (b) \Coqcode{Kstop}, is a concise, high level,  description of the the prestack. It gets compiled to \Coqcode{Prestack}, which is a special type of \Coqcode{Stackframe}, and finally laid in memory} \label{fig:Kstop_compile}
+\end{figure}
+
+%Our empty continuation \Coqcode{Kstop} takes \Coqcode{targs} as an argument. That is because continuations also represent the call stack; \Coqcode{Kstop targs} represents the preestack of \Ccode{_start()} that might contain some arguments for \Coqcode{f}.
 
 \subsubsection{Register transfer languages}
-In the Cminorgen phase, CompCert coalesces  all function variables into a stack frame. Some functions might get empty stack frames (i.e., a memory block with empty permissions, that cannot be written to), if none of their variables has their address taken. These stack frames are important, even the empty ones, because that is where spill variables will be written after register allocation in the Allocation phase. We follow suit and create an empty stack frame for \Ccode{_start()}. The stack is empty because the compiler has not yet decided what arguments will be passed in memory and which ones in register. Even for architectures that pass all arguments in memory, this is not doesn't until the Stacking pass. So for languages before Stacking (Cminor, CminorSel, RTL, LTL, Linear), there is an extra line in \Coqcode{entry_point} to make sure that the empty stack frame is allocated:
+In the Cminorgen phase, CompCert coalesces  all function variables into a stack frame. Some functions might get empty stack frames (i.e., a zero-sized memory block), if none of their variables has their address taken. These stack frames are important, even the empty ones, because that is where spill variables will be written after register allocation in the Allocation phase. We follow suit and create an empty stack frame for \Ccode{_start()}. The stack is empty because the compiler has not yet decided what arguments will be passed in memory and which ones in registers. Even for architectures that pass all arguments in memory, this is not done until the Stacking pass. So for languages between Cminorgen and Stacking (Cminor, CminorSel, RTL, LTL, Linear), there is an extra line in \Coqcode{entry_point} to make sure that the empty stack frame is allocated:
 \begin{lstlisting}
 	Mem.alloc m0 0 0 = (m1, stk) \end{lstlisting}
-The rest of the predicate is almost identical to the one in \ref{code:entry_point_Clight}.
+The rest of the predicate is almost identical to the one in \autoref{code:entry_point_Clight}.
+
+These languages have a list of stack frame descriptors (called \Coqcode{Stackframe}) , instead of continuations; accordingly, the prestack is characterized by the predicate \Coqcode{Prestack}, a frame descriptor with just enough information to know the size of the prestack and where \main should return. \Coqcode{Prestack} is generated from \Coqcode{Kstop} and, after the \Coqcode{Stacking} pass, it is translated to an actual prestack as shown in \label{fig:Kstop_compile}.
 
 \subsubsection{Machine languages}
 
-In the machine languages (Mach and Asm), a function expects certain shape from the stack frame of its caller. We replace the empty stack frame allocation above, with the constructon of the "pre-stack frame" as shown in \ref{code:entry_point_Mach}.
+In the machine languages (Mach and Asm), a function expects certain shape from the stack frame of its caller. We replace the empty stack frame allocation above, with the construction of the prestack as shown in \autoref{code:entry_point_Mach}.
 \begin{table}
 \begin{lstlisting}[ numbers=left]
       $\vdots$
@@ -172,4 +205,24 @@ In the machine languages (Mach and Asm), a function expects certain shape from t
 \end{lstlisting}
 \caption{Part of the \Ccode{entry_point} predicate in Mach}\label{code:entry_point_Mach}
 \end{table}
-The function \Coqcode{stack-defs} is an architecture dependent function that calculates the layout of the "pre-stack" and returns the size \Coqcode{stk_sz}, the ofset of the return address \Coqcode{ret_ofs} and a back link to parent frame \Coqcode{parent_ofs}. The last two values are unused, but the stack must have space for them. Line 3 allocates the stack of the correct size. Lines 5-8 store the return address, the link to the parent and the arguments in the stack. 
+The function \Coqcode{stack-defs} is an architecture dependent function that calculates the layout of the stack and returns the size \Coqcode{stk_sz}, the offset of the return address \Coqcode{ret_ofs} and a back link to parent frame \Coqcode{parent_ofs}. The last two values are unused, but the stack must have space for them. Line 3 allocates the stack of the correct size. Lines 5-8 store the return address, the link to the parent and the arguments in the stack. 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
