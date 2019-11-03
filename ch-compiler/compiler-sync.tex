@@ -1,0 +1,240 @@
+\section{Simulations for synchronizations}\label{sec:simSync}
+
+The synchronization steps (\Ccode{acquire}, \Ccode{acqfail}, \Ccode{release}, \Ccode{make_lock}, \Ccode{free_lock} and \Ccode{spawn}), are the most involved of the CPM steps, because they build in the functionality of the synchronization operations. These steps can change the permission maps ($\vec{\pi}$), the lock permissions and locations ($\lockpool$), the memory ($m$) and even extend the number of threads ($\vec{s}$). In this section we describe the simulation diagrams for these steps; an overview of the mechanized proof is outlined in \cref{code:syncsim} and the full proof can be found in the Coq code. 
+
+\begin{fnlemma}{The coq implementation is presented in \cref{code:syncsim}}\label{thm:simSync}
+For two hybrid machines with consecutive hybrid bounds ( $\text{hb}_2 = \text{hb}_1 +1$) the synchronization steps form a simulation diagram in lockstep.
+%
+%Let there be two CPM states, $\Sigma_1$ and $\Sigma_2$, in a match relation $\Sigma_1 \widesim{j} \Sigma_2$ (as defined in \cref{def:CPMmatch}, with \cref{def:matchmarkedstates}). If $\Sigma_1$ takes a synchronization step to some $\Sigma_1'$, then $\Sigma_2$ takes the same synchronization step to some $\Sigma_2'$, transferring equivalent permissions (if any)  and such that the match relation can be reestablished for a larger injection $\Sigma_1' \succsim_{j'} \Sigma_2'$.
+\end{fnlemma}
+
+\begin{proof}
+We prove each step separately. 
+The proof for \Ccode{spawn} is detailed in \cref{thm:simSpawn}. 
+The proofs for steps \Ccode{acquire} and \Ccode{release} are almost identical and we explain the proof for the former in \cref{thm:simAcq}. 
+The steps \Ccode{make_lock}, \Ccode{free_lock} and \Ccode{acqfail} are relatively simple and don't present any difficulty that is not solved in the cases above, so we omit their proof here. 
+\end{proof}
+
+\subsection{Simulation of the \Ccode{Spawn} step}
+
+In this section we state and prove the simulation of the \Ccode{spawn} step for Hybrid machines.
+\begin{lemma}%{The coq implementation is presented in \cref{coq:spawnDiagramCPM}}
+\label{thm:simSpawn}
+For two hybrid machines with consecutive hybrid bounds ( $\text{hb}_2 = \text{hb}_1 +1$) the spawn steps form a simulation diagram in lockstep.
+%
+%Let there be two CPM states, $\Sigma_1$ and $\Sigma_2$, in a match relation $\Sigma_1 \widesim{j} \Sigma_2$ (as defined in \cref{def:CPMmatch}, with \cref{def:matchmarkedstates}). If $\Sigma_1$ takes an \Ccode{spawn} step to some $\Sigma_1'$, then $\Sigma_2$ also takes a \Ccode{spawn} step to some $\Sigma_2'$, transferring equivalent permissions (if any)  and such that the match relation can be reestablished for a larger injection $\Sigma_1' \succsim_{j'} \Sigma_2'$.
+\end{lemma}
+
+\begin{proof} Let $\Sigma_1 = \left<i\cdot\mho, (\vec{s}_1, \vec{\pi}_1, \lockpool_1), m_1 \right>$ and $\Sigma_2 = \left<i\cdot\mho, (\vec{s}'_2, \vec{\pi}'_2, \lockpool_2), m_2 \right>$, 
+such that
+$$\Psi,\Phi \vdash_\mathrm{HM} 
+\left<i\cdot\mho, (\vec{s}_1, \vec{\pi}_1, \lockpool_1), m_1 \right>
+\!\!\stackrel{\mathrm{Spa}_{ij}}\mapsto\!\!
+\left<\mho, (\vec{s}'_1, \vec{\pi}'_1, \lockpool_1), m_1 \right>$$
+Then we know that, by the spawn rule in \cref{fig:dry-concurrent-sync}, 
+\begin{enumerate}
+\item $s_1[i]\!=\!\mathrm{Blocked}(\sigma_1) $,
+\item $\mathrm{at\_external}\,\sigma_1=\mathrm{Some}(\mathrm{Spawn}(f\!,\!a_1))$,
+\item $\vec{s}'_1 = \vec{s}_1[i\!\mapsto \!\mathrm{Resume}(0,\sigma_1),\, j \!\mapsto \!\mathrm{Start}(f\!,\!a_1)]$  and 
+\item $\vec{\pi}'_1 = \vec{\pi}_1[i\mapsto \pi'_1,\,j \mapsto  \delta'_1/ \{\}]$.
+\end{enumerate}
+
+\noindent From the match relation $\Sigma_1 \succsim_{j} \Sigma_2$, defined in \cref{def:CPMmatch}, we can infer:
+\begin{enumerate}
+\setcounter{enumi}{4}
+\item $s_2[i]\!=\!\mathrm{Blocked}(\sigma_2)$,
+\item $\mathrm{at\_external}\,\sigma_2=\mathrm{Some}(\mathrm{Spawn}(f\!,\!a_2))$ such that $a_1 \strinjarrow{j} a_2$ and
+\item there exists $\pi'_2$ and $\delta'_2$, such that $\pi'_1 \strinjarrow{j} \pi'_2$, $\delta'_1 \strinjarrow{j} \delta'_2$.
+\end{enumerate}
+So we can construct 
+\begin{enumerate}
+\setcounter{enumi}{7}
+\item $\vec{s}'_2 = \vec{s}_2[i\!\mapsto \!\mathrm{Resume}(0,\sigma_2),\, j \!\mapsto \!\mathrm{Start}(f\!,\!a_2)]$ and
+\item $\vec{\pi}'_2 = \vec{\pi}_2[i\mapsto \pi'_2,\,j \mapsto  \delta'_2/ \{\}]$
+\end{enumerate}
+such that 
+$$\Psi,\Phi \vdash_\mathrm{HM} 
+\left<i\cdot\mho, (\vec{s}_2, \vec{\pi}_2, \lockpool_2), m_2 \right>
+\!\!\stackrel{\mathrm{Spa}_{ij}}\mapsto\!\!
+\left<\mho, (\vec{s}'_2, \vec{\pi}'_2, \lockpool_2), m_2 \right>.$$
+
+Finally, we must establish $\left<\mho, (\vec{s}'_1, \vec{\pi}'_1, \lockpool_1), m_1 \right> \succsim_{j} \left<\mho, (\vec{s}'_2, \vec{\pi}'_2, \lockpool_2), m_2 \right>$, which we do by considering all the requirements of the match relation for CPMs, defined in \cref{def:CPMmatch}:
+\begin{enumerate}
+\item [(a), (b), (f)] are trivial, 
+\item [(c)] Coherence follows by construction.
+\item [(d)] The injection of permissions follows by construction too.
+\item [(e)] The memory hasn't changed, the only permissions that change were those in threads $j$ and $i$. By  7, above, the injection of the new permissions follows.
+\item[(g),(h),(i)] The new thread has not been initialized, so the new thread $j$, is matched in both machines by definition \cref{def:matchmarkedstates} and 6 above. The match relations for all the other threads follow from the old relation $\Sigma_1 \succsim_{j} \Sigma_2$. 
+\qedhere
+\end{enumerate}
+\end{proof}
+
+\subsection{Simulation of the \Ccode{Acquire} step}
+
+In this section we state and prove the simulation of the \Ccode{acquire} step for Hybrid machines.
+
+\begin{fnlemma}{The coq implementation is presented in \cref{code:syncsim}}\label{thm:simAcq}
+For two hybrid machines with consecutive hybrid bounds ( $\text{hb}_2 = \text{hb}_1 +1$) the acquire steps form a simulation diagram in lockstep.
+\end{fnlemma}
+
+\begin{proof} Let $i$ be the thread that is executing the acquire step. We consider three cases for this proof: (1) $i=\text{hb}_1$, (2) $i<\text{hb}_1$ and (3) $i>\text{hb}_1$. In what follows we present the proof for the first case, when the executing thread is the one compiling. The other two cases follow the same structure, but without the complication of being compiled. We split the proof of the diagram in two parts, first we construct $\Sigma_2'$ and show that $\Sigma_2$ can take an acquire step to it and, second, we prove  $\Sigma_1' \widesim{j} \Sigma_2'$:
+
+\paragraph{Construction of $\Sigma_2'$ and the step} Let $\Sigma_1 = \left<i\cdot\mho, (\vec{s}_1, \vec{\pi}_1, \lockpool_1), m_1 \right>$ and $\Sigma_2 = \left<i\cdot\mho, (\vec{s}'_2, \vec{\pi}'_2, \lockpool_2), m_2 \right>$, 
+such that
+$$\Psi,\Phi \vdash_\mathrm{HM} 
+\left<i\cdot\mho, (\vec{s}_1, \vec{\pi}_1, \lockpool_1), m_1 \right>
+\!\!\stackrel{\mathrm{Acq}_i a_1\, \delta}\mapsto\!\!
+\left<\mho, (\vec{s}'_1, \vec{\pi}'_1, \lockpool_1), m_1 \right>$$
+Then we know that, by the acquire rule in \cref{fig:dry-concurrent-sync}, 
+\begin{enumerate}
+\item $s_1[i]\!=\!\mathrm{Blocked}(\sigma_1) $,
+\item $\mathrm{at\_external}\,\sigma_1=\mathrm{Some}(\mathrm{Acquire}(a_1))$,
+\item $\setcur{m_1}{\pi_1^2[i]}(a_1)=1$
+\item $m_1[a_1\mapsto 0]=m_1'$
+\item $\pi_1[i] \oplus L_1(a_1) = \pi'_1$ where $\delta_1 / \pi_1[i] = \pi_1'$
+\item 
+  $\vec{s}_1[i\mapsto \mathrm{Resume}(0,\sigma_1)]=\vec{s}_1' $, 
+  $\vec{\pi}_1[i\mapsto \pi_1']=\vec{\pi}_1'$ and
+  $\lockpool_1[a_1\mapsto \mathrm{Some}\ \emptyset]=\lockpool_1'$
+\end{enumerate}
+\noindent From the match relation $\Sigma_1 \succsim_{j} \Sigma_2$, defined in \cref{def:CPMmatch}, we can infer:
+\begin{enumerate}
+\setcounter{enumi}{6}
+\item $s_2[i]\!=\!\mathrm{Blocked}(\sigma_2)$,
+\item $\mathrm{at\_external}\,\sigma_2=\mathrm{Some}(\mathrm{Acquire}(a_2))$ such that $a_1 \strinjarrow{j} a_2$
+\item $\setcur{m_2}{\pi_2^2[i]}(a_2)=1$
+%\item $m_2[a_2\mapsto 0]=m_2'$
+\item There exists $\pi_2'$, such that $\pi_2[i] \oplus L_2(a_2) = \pi'_2$.
+\end{enumerate}
+So we can construct 
+\begin{enumerate}
+\setcounter{enumi}{10}
+\item $\delta_2$, such that $\delta_2 / \pi_2[i] = \pi_2'$ and that $\delta_1 \strinjarrow{j} \delta_2$
+\item $m_2' = m_2[a_2\mapsto 0]$
+\item $\vec{s}_2' = \vec{s}_2[i\mapsto \mathrm{Resume}(0,\sigma_2)] $, 
+\item $\vec{\pi}_2' = \vec{\pi}_2[i\mapsto \pi_2']$
+  \item $\lockpool_2' = \lockpool_2[a_2\mapsto \mathrm{Some}\ \emptyset]$
+\end{enumerate}
+Notice that by (11), $\delta_1 \strinjarrow{j} \delta_2$ and by the match relation $\Sigma_1 \succsim_{j} \Sigma_2$, we also know that the content of memory protected by the lock (i.e. those locations where $\delta_i$ has at least Readable permission) are injected. From all the above we can prove:
+$$\Psi,\Phi \vdash_\mathrm{HM} 
+\left<i\cdot\mho, (\vec{s}_2, \vec{\pi}_2, \lockpool_2), m_2 \right>
+\!\!\stackrel{\mathrm{Acq}_i a_2\, \delta}\mapsto\!\!
+\left<\mho, (\vec{s}'_2, \vec{\pi}'_2, \lockpool_2), m_2 \right>$$
+
+\paragraph{The match relation:}  We consider all the requirements of the match relation for CPMs, defined in \cref{def:CPMmatch}:
+\begin{enumerate}
+\item [(a), (b)] are trivial, 
+\item [(c)] The initial states are coherent. In the new states we have the same permissions, albeit in different places, so the new states are also coherent.
+\item [(d), (e)] The new permission maps ($\pi_1'$ and $\pi_2'$), have the same permission as before plus the permissions that were in the lock. Both were injected by $j$, so their addition is also injected by $j$. The permissions of other threads don't change so, by the old match relation, they are injected as well. The memory has only changed in the lock locations ($a_1$ and $a_2$) which are injectable and, by the old match relation, the rest of memory was already in an injection relation so the new memories are as well.
+\item[(f)] The only locks that change are the acquired ones. The new content of the blocks is empty, which is trivially injected.
+\item[(g),(h)] The threads that are not compiling are not changing so their match relations still hold.
+\item[(i)] We expand on the match relation for the compiling thread below.
+
+\end{enumerate}
+ 
+ \begin{figure}
+\center
+\begin{multicols}{2}
+
+\
+
+\
+
+
+\begin{tikzcd}[column sep=tiny]
+(\sigma_1,m_1^0) \arrow[d, "\text{intf}_1^0 \ \ \ \ "']
+& \widesim{j } & (\sigma_2,m_2^0) \arrow[d, dotted, "\ \ \ {\text{intf}_2^0} '"] \\
+(\sigma_1, m_1) &  & (\sigma_2, \overline{m_2})
+\end{tikzcd} 
+
+\
+
+\
+
+\
+
+(a)
+\columnbreak
+
+\begin{tikzcd}[column sep=tiny]
+(\sigma_1,m_1^0) \arrow[d, "\text{intf}_1^0 \ \ \ \ "'] & \widesim{j } & (\sigma_2,m_2^0) \arrow[d, dotted, "\ \ \  {\text{intf}_2^0} '"] \\
+\arrow[d, "\delta_1 \ \ \ \ "'] &  & \arrow[d, dotted, "\ \ \  \delta_2 '"] \\
+\arrow[d, "\text{intf}_1 \ \ \ \ "'] &  & \arrow[d, dotted, "\ \ \  \text{intf}_2 '"] \\
+(\sigma_1, m_1) &  & (\sigma_2, \overline{m_2})
+\end{tikzcd} 
+
+(b)
+\end{multicols}
+\caption{Match relation for \Coqcode{Blocked}}\label{fig:Blockedmactch}
+\end{figure}
+ 
+\noindent We have that $\mathrm{Blocked}(\sigma_1)  \widesim{j}  \mathrm{Blocked}(\sigma_2)$ and we need to prove $\mathrm{Resume}(0,\sigma_1)  \widesim{j}  \mathrm{Resume}(0,\sigma_2)$ using \cref{def:matchmarkedstates}. What the former relation tells us is that, for some previous memories $m_1^0$ and $m_2^0$, the states matched (according to the MOIST simulation of CompCert) and that, since then, other threads produced interference $\text{intf}_1^0$ and $\text{intf}_2^0$ (which means changing locations in memory not visible by the thread) to produce the current memory (as depicted in \cref{fig:Blockedmactch}(a)) and such that 
+\begin{equation}\label{eqn:inft10} \text{intf}_1^0 \strinjarrow{j} \text{intf}_2^0.\end{equation} 
+We now know that the acquire step produces injectable events
+\begin{equation}\label{eqn:delta1} \delta_1 \strinjarrow{j} \delta_2\end{equation}
+ and that, in the future, other threads will produce more interference $\text{intf}_1$ and $\text{intf}_2$ (as depicted in \cref{fig:Blockedmactch}(b)), such that 
+\begin{equation}\label{eqn:inft1} \text{intf}_1 \strinjarrow{j} \text{intf}_2.\end{equation} 
+ Can we establish the match relation of the resulting future states, $(\sigma_1, m_1'') \widesim{j} (\sigma_2, m_2'')$?
+
+First, the entire execution from $(\sigma_1,m_1^0)$ to $(\sigma_1, m_1'')$ constitutes a single step in the Clight MOIST semantics, executing the acquire step 
+\begin{equation}
+\Psi \vdash_\mathrm{Clight} 
+(\sigma_1,m_1^0)
+%\stackrel{\mathrm{Acq }\ \text{intf}_1^0\   \ \delta_1\ \text{intf}_1 }\rightarrow
+\xrightarrow{\mathrm{Acq }\ \text{intf}_1^0\   \ \delta_1\ \text{intf}_1 }
+(\sigma_1, m_1'')
+\end{equation}
+and similarly
+\begin{equation}\label{eqn:Asmacqstep}
+\Phi \vdash_\mathrm{Asm} 
+(\sigma_2,m_2^0)
+%\stackrel{\mathrm{Acq }\ \text{intf}_1^0\   \ \delta_1\ \text{intf}_1 }\rightarrow
+\xrightarrow{\mathrm{Acq }\ \text{intf}_2^0\   \ \delta_2\ \text{intf}_2 }
+(\sigma_2, m_2'').
+\end{equation}
+
+\noindent By the MOIST simulation of CompCert, we know that there are  $\overline{m_2''}$, $\overline{\text{intf}_2^0}$, $\overline{\delta_2}$ and $\overline{\text{intf}_2}$, that complete the step diagram as in \cref{fig:acqsimdiagram}. Since we have $(\sigma_1, m_1'') \widesim{\overline{j}} (\sigma_2, \overline{m_2''})$, we only need to prove that $\overline{m_2''} = m_2''$.
+
+\begin{figure}
+\center
+\begin{tikzcd}[column sep=tiny]
+(\sigma_1,m_1^0) \arrow[d, "\mathrm{Acq }\ \text{intf}_1^0\   \ \delta_1\ \text{intf}_1 "']
+& \widesim{j } & (\sigma_2,m_2^0) \arrow[d, dotted, "\mathrm{Acq }\ \overline{\text{intf}_2^0}\   \ \overline{\delta_2} \ \overline{\text{intf}_2} '"] \\
+(\sigma_1, m_1'') & \widesim{\overline{j} } & (\sigma_2, \overline{m_2''})
+\end{tikzcd} 
+$$(\mathrm{Acq }\ \text{intf}_1^0\   \ \delta_1\ \text{intf}_1) \strinjarrow{\overline{j}} (\mathrm{Acq }\ \overline{\text{intf}_2^0}\   \ \overline{\delta_2} \ \overline{\text{intf}_2}) $$
+\caption{MOIST simulation of acquire steps}\label{fig:acqsimdiagram}
+\end{figure}
+
+We know that $(\mathrm{Acq }\ \text{intf}_1^0\   \ \delta_1\ \text{intf}_1) \strinjarrow{\overline{j}} (\mathrm{Acq }\ \overline{\text{intf}_2^0}\   \ \overline{\delta_2} \ \overline{\text{intf}_2}) $, which means that 
+\begin{equation*}
+\text{intf}_1^0 \strinjarrow{\overline{j}} \overline{\text{intf}_2^0}  \qquad
+%\end{equation}
+%\begin{equation}
+\delta_1 \strinjarrow{\overline{j}} \overline{\delta_2} \quad \text{and} \quad 
+%\end{equation}
+%\begin{equation}
+\text{intf}_1 \strinjarrow{\overline{j}} \overline{\text{intf}_2}. 
+\end{equation*}
+Because $\strinjarrow{}$ is deterministic and because of equations \ref{eqn:inft10}, \ref{eqn:delta1}, and \ref{eqn:inft1}, then 
+\begin{equation*}
+(\mathrm{Acq }\ \overline{\text{intf}_2^0}\   \ \overline{\delta_2} \ \overline{\text{intf}_2}) = (\mathrm{Acq }\ {\text{intf}_2^0}\   \ {\delta_2} \ {\text{intf}_2}) 
+\end{equation*}
+Because external functions in CompCert are deterministic, up to the event, then the step in \cref{eqn:Asmacqstep} and the right step in \cref{fig:acqsimdiagram} are the same and thus $\overline{m_2''} = m_2''$. 
+%\infrule[acquire]{
+% s_i=\mathrm{Blocked}(\sigma) \!\!\!\!\andalso
+%  \mathrm{at\_external}\,\sigma\!=\!\mathrm{Some}(\mathrm{Acquire},\!a) \!\!\andalso
+%  \setcur{m}{\pi^2_i}(a)=1 \\ m[a\mapsto 0]=m' \andalso
+%  \mathrm{guess}~\delta \andalso 
+%  \delta / \pi_i = \pi' \andalso
+%  \pi_i \oplus L(a) = \pi'\\
+%  \vec{s}[i\mapsto \mathrm{Resume}(0,\sigma)]=\vec{s}' \andalso
+%  \vec{\pi}[i\mapsto \pi']=\vec{\pi}' \\
+%  \lockpool[a\mapsto \mathrm{Some}\ \emptyset]=\lockpool'
+%}{
+%\Psi \vdash_\mathrm{CPM} 
+%\left<i\cdot\mho, (\vec{s}, \vec{\pi}, \lockpool), m \right>
+%\!\!\stackrel{\mathrm{Acq}_i a\, \delta}\mapsto\!\!
+%\left<\mho, (\vec{s}', \vec{\pi}', \lockpool'), m'\right>\!\!
+%  }
+\end{proof}

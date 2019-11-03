@@ -1,0 +1,591 @@
+\section{Assembly safety and Spinlock well synchronization}
+\label{sec:asm_proofs}
+
+This section describes how the Concurrent Permission Machine relates to a realistic weakly consistent memory model. There are three important results, 
+first the cooperative CPM can be simulated by a preemptive CPM (the interleaving proof, \autoref{sec:fine}); second, safe CPM executions are well-synchronized and execute safely on X86-32 (\autoref{sec:weak}); and, third the permission in the CPM, don't change the behavior of a safe programs, so they can be erased (\autoref{sec:x86sc}).
+
+The work in the following sections was developed and written by Nick Giannarakis.
+
+
+
+
+\subsection{Instruction interleaving}
+\label{sec:fine}
+From source code down to assembly language we
+reason about CPMs with cooperative concurrency: each thread
+executes undisturbed until it explicitly calls a
+synchronization function such as acquire or release.
+
+Because the threads have noncompeting memory permissions,
+(preemptive) instruction-level interleaving of the threads should
+execute with equivalent behavior.  We formalize this as a
+safety-preservation proof.
+
+\begin{definition}
+  \label{def:fineconc}
+We define $\vdash_\mathrm{FineConc}$, the fine-grained concurrent
+machine, just like the Concurrent Permission Machine except that
+all rules ``consume'' the head of the schedule.
+We illustrate for the \textsc{core} rule:
+
+\vspace{-2ex}
+\infrule[core]{
+ s_i=\left<\mathrm{Run},\sigma\right> \andalso
+  \Psi ~ \vdash_\mathrm{CompCert}~
+  \left<\sigma,\setcur{m}{\pi^1_i}\right> \stackrel{\epsilon}\mapsto \left<\sigma',m'\right>\andalso
+  \mathrm{upmax}(m',m'') \\
+% s_i=\left<\mathrm{Run},\sigma\right> \andalso
+% \decay{\pi_i}{\setcur{m}{\pi_i},\,m'}{\pi'} \\
+%  \Psi ~ \vdash_\mathrm{CompCert}~
+%  \left<\sigma,\setcur{m}{\pi_i}\right> \stackrel{\epsilon}\mapsto \left<\sigma',m'\right>\andalso
+%   \mathrm{upmax}(m',m'') \\
+  \vec{s}'=\vec{s}[i\mapsto \left<\mathrm{Run},\sigma'\right>] \andalso
+  \vec{\pi}'=\vec{\pi}[i \mapsto (\mathrm{Cur}(m'),\pi^2_i)]
+}
+  {
+\Psi \vdash_\mathrm{FineConc} 
+\left<i\cdot\mho, (\vec{s}, \vec{\pi}, \lockpool), m \right>
+\stackrel{\epsilon_i}\mapsto
+\left<\mho, (\vec{s}', \vec{\pi}', \lockpool), m''\right>
+  }
+\end{definition}
+
+\vspace{-2ex}
+Compared to the CPM \textsc{core} rule:
+the schedule after the step is $\mho$ here,
+versus $i\cdot \mho$ in CPM;
+and upmax increases maximum memory permissions.
+When the CPM chooses thread $i$, it keeps choosing $i$
+until the thread reaches atExternal; but FineConc
+consumes $i$ from $\mho$, and the next step may run another
+thread.  After each step, $m$'s max-permissions 
+increase to Freeable.  Max-permissions were used
+to prove CompCert's optimizations correct, but
+are no longer useful after compilation;
+upmax simplifies the proofs in the next stage.
+Any nonstuck execution without upmax will produce the same
+sequence of memory operations with the increased permissions.
+This \emph{upmax} has no effect on Cur permissions:
+in the FineConc machine, the Cur permissions of
+threads are still noncompeting, and threads are still stuck
+if they try to load/store without Read/Write Cur permission.
+
+Because threads' memory permissions don't compete,
+any two interleavings that only change the order of
+execution of core steps should exhibit the same observable behaviors
+and result in equivalent memories (and thread states).
+
+What if a thread never reaches an
+external call (because it infinite-loops, or the
+$\mathrm{FineConc}$ machine's schedule is not long enough)?
+Removing this thread from the schedule will not change
+the observable behavior of the execution---no other
+thread can observe its writes, because it never releases a lock.
+Obviously,
+the thread states of the two executions will no longer be related.
+This does not matter because only
+external steps affect the observable behaviors of the machine---unless
+the thread gets stuck while executing core steps,
+\emph{e.g.,} divides by zero. Hence it is only sound to
+remove a thread from the schedule if it does not get stuck and does
+not reach an external call.
+
+% Figure to explain the things below
+How do we relate
+a $\mathrm{FineConc}$ execution to a $\mathrm{CPM}$ execution?
+When all the $\mathrm{FineConc}$ threads are
+atExternal, it is simple to find a $\mathrm{CPM}$ schedule
+resulting in equivalent thread/memory states.
+When some are not atExternal,
+our simulation relation keeps track of how many (internal) steps
+each thread has made since the last atExternal state.
+
+%\newcommand\ren{\mathrm{r}}
+%\newcommand\blockt{\mathrm{block}}
+
+%\newcommand\filter[2]{[x \leftarrow #1 | x = #2]}
+%\newcommand\filter[2]{#1 |_{#2}}
+
+%HERE uncomment
+%\begin{definition}
+%  \label{def:sim-no-renaming}
+%  $\left<(\vec{s}, \vec{\pi}, \lockpool), m \right>
+%  \stackrel{xs}{\sim} \left<(\vec{s'}, \vec{\pi'},
+%  \lockpool'), m'\right>$  is a   \emph{simulation relation} between two
+%  states, annotated with a list of thread identifiers $xs$ (representing
+%  extra steps taken by the FineConc machine),  iff:
+%  For every thread $i$, there exists a state
+%  $\left<(\vec{s_2}, \vec{\pi_2}, \lockpool), m_2\right>$ s.t.:
+%  \begin{enumerate}[topsep=0pt]
+%  \item
+%    $\left<\filter{xs}{i},(\vec{s}, \vec{\pi}, \lockpool), m \right>
+%    \mapsto^* \left<nil,(\vec{s_2}, \vec{\pi_2}, \lockpool_2), m_2\right>$
+%  \item $\vec{s'}(i)=\vec{s_2}(i)$, $\vec{\pi'}(i)=\vec{\pi_2}(i)$,
+%    and at any address $a$ where $\vec{\pi'}(i)$ gives read permission,
+%    $m'(a)=m_2(a)$.
+%  \end{enumerate}
+%  (We write $\filter{xs}{i}$ to mean the subsequence of $xs$ elements
+%  that are equal to $i$.)
+%\end{definition}
+
+
+By establishing such a relation between the two machines we can prove
+that safety of the $\mathrm{CPM}$ implies safety of the internal
+steps (\textsc{start, resume, core, suspend%, stutter
+})
+ of the $\mathrm{FineConc}$ machine.
+
+\begin{lemma}
+  \label{thm:coarse-to-fine-internal:special}
+  Suppose
+  $\left<(\vec{s_\mathrm{c}}, \vec{\pi_\mathrm{c}},
+    \lockpool_\mathrm{c}), m_\mathrm{c} \right>
+  \stackrel{xs}{\sim} \left<(\vec{s_\mathrm{f}},
+  \vec{\pi_\mathrm{f}}, \lockpool_\mathrm{f}), m_\mathrm{f}\right>$,
+  that is,
+  CPM state $S_\mathrm{c}$ simulates FineConc state $S_\mathrm{f}$
+  modulo some extra fine steps $xs$.
+   Suppose $S_\mathrm{c}$ is safe for all schedules:\newline
+  $\forall \mho_\mathrm{c},~ \Psi \vdash_\mathrm{CPM}
+  \mathrm{safe}~\left<\mho_\mathrm{c},(\vec{s_\mathrm{c}},\vec{\pi_\mathrm{c}},\lockpool_\mathrm{c}),m_\mathrm{c}\right>$.
+  Then for any thread $i$ and schedule
+  $\mho_\mathrm{f}$ such that $\vec{s_\mathrm{f}}(i)$ is at an
+  internal step there exists a state
+  $\left<(\vec{s'_\mathrm{f}}, \vec{\pi'_\mathrm{f}},
+    \lockpool'_\mathrm{f}), m'_\mathrm{f}\right>$
+  such that:
+  \begin{enumerate}[topsep=0pt]
+  \item
+    $\left<i\cdot\mho_{\mathrm{f}},(\vec{s_\mathrm{f}},
+      \vec{\pi_\mathrm{f}}, \lockpool_\mathrm{f}), m_\mathrm{f}\right>
+    \mapsto \left<\mho_{\mathrm{f}},(\vec{s'_\mathrm{f}},
+      \vec{\pi'_\mathrm{f}}, \lockpool'_\mathrm{f}),
+      m'_\mathrm{f}\right>$
+  \item
+    $\left<(\vec{s_\mathrm{c}}, \vec{\pi_\mathrm{c}},
+      \lockpool_\mathrm{c}), m_\mathrm{c} \right> \stackrel{i \cdot
+      xs}{\sim} \left<(\vec{s'_\mathrm{f}},
+      \vec{\pi'_\mathrm{f}}, \lockpool'_\mathrm{f}),
+      m'_\mathrm{f}\right>$
+  \end{enumerate}
+\end{lemma}
+\begin{proof}
+  Instantiate the CPM schedule as  $\mho_\mathrm{c}\!\! = \!\![i]$;
+  the conclusion follows from \autoref{def:sim-no-renaming}
+  with determinism of internal steps.
+\end{proof}
+
+\autoref{thm:coarse-to-fine-internal:special} demonstrates that in order to
+prove safety of internal steps for the $\mathrm{FineConc}$ machine it
+suffices to only relate the state of individual threads with the ones
+of an equivalent execution in the $\mathrm{CPM}$ machine. However,
+that is not enough to prove safety of synchronization steps.
+Synchronization steps may consult the lock pool;
+will lock pools be equivalent between CPM and FineConc executions?
+Synchronization steps require guesses $\delta$ of what
+permissions to transfer; will the CPM $\delta$'s work in
+the FineConc machine?
+
+Lock pools are equivalent between the two machines,
+since the extra FineConc internal steps do not change the lock pool.
+The CPM $\delta$'s do indeed work for FineConc,
+but since internal steps may free blocks,
+we must prove that these $\delta$'s still avoid
+incoherence between thread permissions.
+
+\begin{definition}
+  \label{def:weak-equivalence}
+  Let
+  $\left<(\vec{s_\mathrm{c}},\vec{\pi_\mathrm{c}},\lockpool_\mathrm{c}),m_\mathrm{c}
+  \right>$
+  and
+  $\left<(\vec{s_\mathrm{f}}, \vec{\pi_\mathrm{f}},
+    \lockpool_\mathrm{f}), m_\mathrm{f}\right>$
+  be two states such that
+  $\left<(\vec{s_\mathrm{c}}, \vec{\pi_\mathrm{c}},
+    \lockpool_\mathrm{c}), m_\mathrm{c} \right> \stackrel{xs}{\sim}
+  \left<(\vec{s_\mathrm{f}}, \vec{\pi_\mathrm{f}},
+    \lockpool_\mathrm{f}), m_\mathrm{f}\right>$
+  for some list of thread identifiers $xs$. The states are
+  \emph{weakly equivalent} iff for every thread $i$, 
+  ~$\vec{\pi_\mathrm{c}}(i) \geq \vec{\pi_\mathrm{f}}(i)$.
+\end{definition}
+
+\noindent The $\vec{\pi_\mathrm{c}} \geq \vec{\pi_\mathrm{f}}$ lets
+the extra FineConc steps free some blocks.
+
+\begin{theorem}[Interleaved safety, special case]
+\label{thm:coarse-to-fine:special}
+~\newline
+Let $\Psi$ be an assembly-language program
+\textbf{with no internal function calls},
+with initial state $\left<\sigma_0,m_0\right>$.
+Let $\pi_0$ be the max permissions of $m_0$.
+Assume
+$\forall n,\mho_\mathrm{c}.~
+\Psi \vdash_\mathrm{CPM}
+\mathrm{safe}_n\left<\mho_\mathrm{c},
+([\left<\mathrm{Run},\sigma_0\right>],[\pi_0], \{\}), m_0\right>$.
+%(We define
+%  $  \Psi \vdash_\mathrm{CPM} \mathrm{safe}_n$
+%  analogously to \autoref{def:safety}.)
+\newline
+Then
+$\forall \mho_\mathrm{f}.~
+\Psi \vdash_\mathrm{FineConc}
+\mathrm{safe}_{|\mho_\mathrm{f}|}\left<\mho_\mathrm{f},
+([\left<\mathrm{Run},\sigma_0\right>],[\pi_0], \{\}), m_0\right>$.
+\end{theorem}
+\begin{proof}
+We must prove that for any possible
+preemptive schedule, the FineConc machine is safe.
+How do we know that those extra internal steps are safe
+(e.g., don't access memory
+outside the thread's current $\pi$ footprint)?
+
+%\begin{figure}[ht]
+%\small
+{\small
+\begin{tikzpicture}[descr/.style={fill=white,inner sep=0pt}]
+  \matrix (n) [matrix of math nodes, row sep=3em, column sep=1.1em,text
+  height=1ex, text depth=0.0ex, label={[font=\small]below:\textsc{Internal Step}}]
+  { \left<s_c, m_c \right>  \\
+    \left<s_f, m_f \right> & 
+    \left<s_f', m_f' \right> \\};
+  \path[densely dashed,->,font=\small] (n-2-1) edge node[above] {$i$} (n-2-2);
+  \path[-,font=\small] (n-2-1) edge node[left] {$xs$} (n-1-1);
+  \path[densely dashed] (n-1-1) edge node [above,sloped,anchor=south] 
+  {$i \cdot xs $} (n-2-2);
+\begin{scope}[xshift=4cm]
+  \matrix (n) [matrix of math nodes, row sep=3em, column sep=1.1em,text
+  height=1ex, text depth=0ex, label={[font=\small]below:\textsc{Suspend Step}}]
+  { \left<s_c, m_c \right> & \left<s_c', m_c'\right> \\
+    \left<s_f, m_f \right> & 
+    \left<s_f', m_f' \right> \\};
+  \path[densely dashed,->,font=\small] (n-1-1) edge node[above] {$i$} (n-1-2);
+  \path[densely dashed,->,font=\small] (n-2-1) edge node[above] {$i$} (n-2-2);
+  \path[-,font=\small] (n-2-1) edge node[left] {$xs$} (n-1-1);
+  \path[densely dashed] (n-1-2) edge node [left, font=\small] 
+  {$ xs-i $} (n-2-2);
+\end{scope}
+
+\begin{scope}[xshift=8cm]
+  \matrix (n) [matrix of math nodes, row sep=3em, column sep=1.1em,text
+  height=1ex, text depth=0ex, label={[font=\small]below:\textsc{External Step}}]
+  { \left<s_c, m_c \right> & \left<s_c', m_c'\right> \\
+    \left<s_f, m_f \right> & 
+    \left<s_f', m_f' \right> \\};
+  \path[densely dashed,->,font=\small] (n-1-1) edge node[above] {$i$} (n-1-2);
+  \path[densely dashed,->,font=\small] (n-2-1) edge node[above] {$i$} (n-2-2);
+  \path[-,font=\small] (n-2-1) edge node[right] {$i \not \in xs$} (n-1-1);
+  \path[densely dashed] (n-1-2) edge node [right] 
+  {$ xs $} (n-2-2);
+\end{scope}
+\end{tikzpicture}
+}
+
+%\vspace*{-.6in}\hspace*{1.7in}\begin{minipage}{1.4in}
+%\caption{Simulation diagrams between $\mathrm{CPM}$ and $\mathrm{FineConc}$}
+%\label{fig:simulations}
+%\end{minipage}
+%\vspace*{.1in}
+%\end{figure}
+
+Each step on schedule $\mho_\mathrm{f}$
+is an internal, suspend, or external step.  If
+internal, use \autoref{thm:coarse-to-fine-internal:special} to show
+that this step is safe and simulation is retained.  If
+\textsc{suspend}, then by the diagram % of \autoref{fig:simulations}
+both machines step and simulation is retained. If external, then this
+thread is suspended by a previous \textsc{suspend} step and hence its
+thread id cannot be in the list of extra steps, and the third diagram
+% of \autoref{fig:simulations}
+applies.
+\end{proof}
+
+\paragraph{Renaming stack frames.}
+\label{sec:alloc}\label{nextblock}
+
+Now we remove the
+``no internal function calls'' restriction.
+
+
+CompCert's handling of ``fresh'' blocks makes the interleaving proof more
+complicated.  Whenever any CompCert language (Clight, x86) needs a fresh block for a stack-allocated variable or an
+entire stack frame,
+% \footnote{%
+%   In principle, the same pool of fresh blocks can be used for
+%   heap-allocated (malloc) blocks.  But the core languages themselves
+%   do not malloc; malloc is a call to a library, and whether they
+%   consume fresh blocks or reuse old blocks is up to the library,
+%   not visible in the core language semantics.  A good malloc/free library
+%   for concurrency will maintain a per-thread free list to reduce
+%   lock contention.
+% }
+it
+increments the \emph{nextblock} component of the memory $m$.
+When showing a relation between differently interleaved
+executions (e.g., cooperative vs. preemptive), one must
+``$\alpha$-convert'' the block-numbers.  Fortunately, all the
+CompCert languages have semantics that are invariant under
+such renaming; for example:
+
+\begin{lemma}
+\label{x86-nextblock}
+  Execution of x86 Asm is invariant under permutation of block-numbers
+  (between any computation steps).
+\end{lemma}
+
+\begin{theorem}[Interleaved safety, general case]
+\label{thm:coarse-to-fine}
+Let $\Psi$ be an assembly-language program,
+with initial state $\left<\sigma_0,m_0\right>$.
+Let $\pi_0$ be the max permissions of $m_0$.
+\newline
+Assume that  $\forall n,\mho_\mathrm{c}.~
+\Psi \vdash_\mathrm{CPM}
+\mathrm{safe}_n\left<\mho_\mathrm{c},
+([\left<\mathrm{Run},\sigma_0\right>],[\pi_0], \{\}), m_0\right>$.
+\newline
+Then $ % \forall \mho_\mathrm{f}.~
+\Psi \vdash_\mathrm{FineConc}
+\mathrm{safe}_{|\mho_\mathrm{f}|}\left<\mho_\mathrm{f},
+([\left<\mathrm{Run},\sigma_0\right>],[\pi_0], \{\}), m_0\right>$.
+\end{theorem}
+\begin{proof}
+The supplementary documents contain definitions of equivalence-modulo-renaming that lead to this proof.
+  It is like the proof of \autoref {thm:coarse-to-fine:special},
+  but wherever ``equivalence'' of memories or thread-states is used,
+  use equivalence modulo renaming of blocks.  
+\end{proof}
+
+% \begin{definition}
+%   \label{def:state-renaming}
+%   A state $<\vec{s'}, \vec{\pi'}, \lockpool'), m'>$ is a
+% renaming of a state $(\left<\vec{s}, \vec{\pi}, \lockpool), m \right>$ under
+% $f : \blockt \rightharpoonup \blockt$ iff:
+%   \begin{enumerate}
+%   \item $|\vec{s}| = |\vec{s'}|$ 
+%   \item For every thread i, $\setcur{m}{\pi} \sim_f \setcur{m'}{\pi'}$
+%   \item $\sigma'$ is equal to $f(\sigma)$, i.e. $\sigma$ where every
+%     block has been renamed according to $f$.
+%   \end{enumerate}
+% \end{definition}
+
+
+
+
+\subsection{Well synchronized programs}
+\label{sec:weak}
+
+Correctness of sequentially consistent executions does not
+\emph{normally} guarantee correctness on actual processors due to
+weaker consistency guarantees.  But it does so for
+\emph{well-synchronized} programs that make proper use of
+synchronization mechanisms to ensure race-freedom between nonatomic
+accesses. For our instance of the CPM with x86 semantics, we adopt a
+slight modification of Owens's \cite{owens10:ecoop} notion of spinlock
+well-synchronized for TSO, which is the memory model actually used by x86 processors. In particular, Owens proved:
+
+\begin{definition}[memorySC]
+\label{def:memorySC}
+  A program is \emph{memory sequentially consistent (memorySC)} iff
+  for each of its possible executions on x86-TSO, there exists
+  a memory equivalent execution on x86-SC \cite[Definition 4]{owens10:ecoop}.
+  Two execution traces are
+  \emph{memory equivalent} iff they have the same subsequence of
+  writes to shared memory, and there exists a bijection between the
+  read events of each trace such that corresponding read events
+  read from the same write event.
+x86-TSO is the instruction set architecture supported
+by Intel and AMD; x86-SC is a sequentially consistent architecture
+obtained by removing all of the write buffers.
+\end{definition}
+
+\begin{definition}[spinlock well-synchronized]
+\label{def:sws}
+  A program is \emph{spinlock well-synchronized} w.r.t. a particular
+  spinlock implementation iff for every x86-SC execution, and for every
+  pair of competing events that are not on a spinlock, there is a
+  spinlock that is released and then acquired between them.
+  \cite[Definition 7]{owens10:ecoop}
+  \end{definition}
+
+\begin{theorem}[Owens Theorem 2]
+\label{thm:owens2}
+  If an x86 program is spinlock well-synchronized and the locations
+  of spinlocks are only accessed by the spinlock code, then it is
+  memorySC. \cite[Theorem 2]{owens10:ecoop}
+\end{theorem}
+
+We generalize ``spinlocks are only accessed by the spinlock code''
+to account for Makelock and Freelock:
+\begin{definition}[Spinlock clean]
+\label{def:clean}
+An event trace $\epsilon$ is \emph{spinlock clean}
+iff: 
+\begin{itemize}
+  \item for all $i<j$ such that $\epsilon_i$ is
+    $\mathrm{Makelock}(a)$
+    and there is no $i<u<j$ such that $\epsilon_u$ is 
+    $\mathrm{Freelock}(a)$,
+    then $\epsilon_j$ is not $\mathrm{Read}(a)$ or $\mathrm{Write(a)}$.
+    That is, between $\mathrm{Makelock}(a)$
+    and $\mathrm{Freelock}(a)$
+    there are no (nonatomic) Reads or Writes to $a$.
+  \item forall $i$ such that $\epsilon_i$ is $\mathrm{Acquire}(a)$ or
+    $\mathrm{Release}$ there is $j < i$ such that
+    $\epsilon_j = \mathrm{Makelock}(a)$ and there is no $j < u < i$
+    such that $\epsilon_u = \mathrm{Freelock}(a)$.
+  % \item forall $i$ such that $\epsilon_i$ is $\mathrm{Acquire}(a)$ or
+  %   $\mathrm{Release}$ there is $j < i$ such that
+  %   $\epsilon_j = \mathrm{Makelock}(a)$ and there is no $j < u < i$
+  %   such that $\epsilon_u = \mathrm{Freelock}(a)$.
+  \end{itemize}
+\end{definition}
+
+\begin{conjecture}
+  If an x86 program is spinlock well-synchronized and spinlock clean, then it is
+  memorySC.
+\end{conjecture}
+This is a straightforward extension of Owens's theorem.
+
+
+\begin{theorem}[FineConc is synchronized and clean]
+\label{thm:sync-clean}
+~ \newline
+Suppose 
+$\Psi \vdash_\mathrm{FineConc}
+\left<\mho_\mathrm{f},
+([\left<\mathrm{Run},\sigma_0\right>],[\pi_0], \{\}, m_0\right>
+\stackrel{\epsilon}\mapsto S$,
+that is, an interleaved execution executes
+with event trace $\epsilon$.
+Then $\epsilon$ is spinlock well-synchronized and spinlock clean.
+\end{theorem}
+\begin{proof} Proved in Coq, and in \LaTeX: see the supplement. \end{proof}
+  
+Owens uses the x86 spinlock from Linux v2.6.24.7
+\cite[Fig. 2]{owens10:ecoop}.
+For ``ticketed spinlocks'' Owens proves a result (his Theorem 3)
+that is weaker: it requires the thread releasing a lock to be
+the same one that acquired it.  Thus it prohibits daring
+concurrency; we cannot use ticketed spinlocks
+to implement our model.
+
+While Owens's theorem only addresses x86-TSO, we expect that similar theorems exist for all other major architectures: indeed, ``race-free programs have sequentially consistent behavior'' is generally considered a necessary correctness condition for weak-memory processors~\cite{adve90drf}.
+
+\begin{comment}
+\begin{tabular}{cccl}
+  Thread 1 & Thread 2 & Thread 3 & (initially: A and B locked) \\ \cline{1-3}
+\\[-2ex]
+  store X & acquire A & acquire B & \\
+  release A & release B & load X & \\ \cline{1-3}
+  \\
+\end{tabular}
+
+
+We propose instead a new notion that generalizes to
+daring semaphores on 
+memory models including TSO, ARM, Power, and the C11 release-acquire atomics.
+Here, we assume that \emph{lock} means the conventional
+use of CAS (on some architectures) or Load-Reserved/Store-Conditional
+on others;
+with appropriate loops (if spinlocks) or queueing (if semaphores);
+along with lightweight ``acquire'' fences (or in the C11 case,
+doing the CAS in ``release-acquire'' mode).
+The implementation choice does not matter for
+\autoref{def:sws2} or \autoref{thm:sync-clean},
+but \emph{will} matter for our generalization
+of Owens's theorem: \autoref{thm:synchronized-good}.
+
+\begin{definition}
+\label{def:sws2}
+  An event trace $\epsilon$ is \emph{release-acquire well synchronized}
+  iff: For any $i<j$, if event $\epsilon_i$ competes with $\epsilon_j$,
+  then there exist a chain $i < r_1 < a_1 < \ldots < r_n < a_n < j$,
+  for $n>0$, such that $\epsilon_{r_k}$ is
+  the release of some lock $a_k$ and $\epsilon_{a_k}$ is the acquire of $a_k$,
+  and (for each $0<k<n$) $a_k$ is performed by the same thread as $r_{k+1}$.
+We define \emph{competing events} as:
+\emph{makelock} and \emph{freelock} compete with \emph{read, write, acquire, release}; \emph{read} and \emph{write} compete with \emph{write}.
+\end{definition}
+
+
+\begin{conjecture}
+\label{thm:synchronized-good}
+  If a program is release-acquire well-synchronized and Read/Write clean,
+  then\newline
+  (1) for each of its possible executions on x86-TSO,
+  there exists a memory equivalent execution on x86-SC; \newline
+  (2) for each of its possible executions on Power,
+  there exists a memory equivalent execution on Power-SC.
+\end{conjecture}  
+
+We state these very reasonable conjectures here to motivate
+our main theorem.
+That is, \autoref{thm:mainresult} guarantees that
+every sequentially-consistent-interleaved execution
+of the machine-language program obeys the rules
+of the Concurrent Permission Machine.  Intuitively that
+guarantees race freedom.  More technically, we expect that
+it guarantees \emph{release-acquire well-synchronized},
+and therefore that any observable behavior on the weakly
+consistent machine is equivalent to some behavior on a
+(hypothetical) SC machine.  And therefore, by
+\autoref{thm:mainresult}, all behaviors obey the
+source-level specification in Concurrent Separation Logic.
+\end{comment}
+
+\subsection{Erasing the permissions, at last}
+\label{sec:x86sc}
+Our Concurrent Erased Machine is like our fully interleaved machine
+($\vdash_\mathrm{FineConc}$), but without the thread permissions
+$\vec{\pi}$, lock permissions $\lockpool$, or guesses $\delta$.  In
+the memories $m$, all permissions are reset to $\top$ (Freeable) at
+each step. This imitates a conventional sequentially consistent
+machine, but it can be conveniently formulated on top of
+CompCert's sequential semantics.
+\todo{Imitates/emulates/simulates?}
+
+We can define an erasure from states $S$ of FineConc
+to states $\hat{S}$ of the CEM, by removing
+$\vec{\pi}$ and $\lockpool$.
+
+\begin{theorem}[Erasing the permissions]
+\label{thm:erasure-x86SC}
+~ \newline
+Suppose a program executes, 
+$  
+\Psi \vdash_\mathrm{FineConc}
+\left<\mho_\mathrm{f},
+([\left<\mathrm{Run},\sigma_0\right>],[\pi_0], \{\}, m_0\right>
+\stackrel{\epsilon}\mapsto S$.
+Then $\Psi$ executes
+in the Concurrent Erased Machine \emph{with the same trace} $\epsilon$,\quad
+$  
+\Psi \vdash_\mathrm{CEM}
+\left<\mho_\mathrm{f},
+([\left<\mathrm{Run},\sigma_0\right>],\{\}, m_0\right>
+\stackrel{\epsilon}\mapsto \hat{S}$.
+\end{theorem}
+\begin{proof}
+  As usual in an erasure theorem,
+  permissions $\pi$ do not affect
+  \emph{what} results are computed in FineConc,
+  only whether the execution gets stuck.
+  The trace $\epsilon$ records what memory operations have taken place.
+\end{proof}
+
+\begin{claim}[x86-SC]
+  The Concurrent Erased Machine is exactly a model of what Owens
+  calls \emph{x86-SC}.
+\end{claim}
+\begin{proof}Self-evident.  To prove it, one must compare
+  the CEM instantiated with CompCert's definition of x86 assembly
+  language, with Owens's x86-SC model.
+  % In the future, we hope to reformulate Owens's proof in Coq
+  % so that this simple but tedious comparison is machine-checked.
+  % Not sure if we hope to do that in the future, given that we are talking about using Batty's
+  % semantics.
+\end{proof}

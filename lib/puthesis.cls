@@ -1,5 +1,5 @@
 \NeedsTeXFormat{LaTeX2e}
-\ProvidesClass{puthesis}
+\ProvidesClass{lib/puthesis}
          [2008/05/02 v1.4 Princeton University Thesis class]
 \RequirePackage{setspace}
 \newcounter{subyear}
@@ -54,7 +54,7 @@
 \clearpage\mainmatter
 }
 \def\@submitted{\@submittedmonth~\@submittedyear}
-\def\@dept{Mathematics}
+\def\@dept{Computer Science}
 \def\@deptpref{Department of}
 \def\departmentprefix#1{\gdef\@deptpref{#1}}
 \def\department#1{\gdef\@dept{#1}}

@@ -1,11 +1,213 @@
 
 \chapter{Introduction\label{ch:intro}}
 
-The main ultimate goal of this thesis is to create a modular way to prove compilers safe, even in the presence of concurrency. There are already several compilers proven safe, with machine checked proofs, that give guarantees for sequential programs. Instead of reinventing the wheel, I intend to leverage those proofs and use it to give guarantees for concurrent programs.
+Write a shared-memory concurrent C program using Pthreads primitives such as mutexes or general semaphores. 
+Now, reason about your program: is it correct? 
+Once the optimizing C compiler transforms it, is it still correct? 
+Once the multicore computer with weakly consistent memory executes it, is it still correct? 
+Can you verify all that, with machine checked proofs?
 
-On top of "just a compiler proof", our system is intended to be compatible with a realistic separation logic and usable on realistic machines like X86 TSO.
 
-The main result:
+%We will consider shared-memory concurrent C (or assembly language) 
+%programs that synchronize using the standard threads interface:
+%spawn new threads, create new semaphores (locks), release and acquire
+%those locks, destroy the locks.
+
+When writing and compiling your C program, pay attention to
+the difference between \emph{atomic} loads/stores
+and \emph{nonatomic} loads/stores.  Nonatomic memory
+operations are the ``ordinary'' ones that compilers
+(and hardware instruction-execution pipelines)
+should optimize:
+eliminate redundant loads, eliminate redundant stores,
+insert redundant loads (if that reduces register pressure),
+hoist loads above stores (if the addresses are different).
+Atomic memory operations are used for synchronization; the benign races.  In a typical
+program, one expects that most memory operations are ``ordinary''
+nonatomic accesses, amenable to optimization (and easier
+reasoning about source programs). In an ideal world, the bulk of program and compiler
+verification are done on on ``ordinary'' memory access, as if the program were sequential. 
+Atomic memory operations, where synchronization magic happens, should be 
+modularly separated to make reasoning easier.
+
+This thesis is part of a larger effort to reason about such programs,\todo{This is a test of the todos.} 
+prove them correct  in the source code, compile them correctly and
+have them execute correctly in a realistic machine, what we call the 
+\emph{top-to-bottom correctness}. All of this, with modular proofs, connected in an entirely
+machine-checked proof.  
+
+The backbone of this work
+%How should one reason about the operational semantics of such programs?
+is a formalization of the execution model
+of C and assembly language programs that expresses,
+with great generality, what programs should be allowed to do (but not more);
+that allows modular reasoning about source programs, source-level
+program logics, source-level static analyses, compiler optimizations,
+and execution on relaxed memory models.  Our semantic model, called the 
+\emph{Concurrent Permission Machine} (or CPM for short), carefully
+separates nonatomic operations from synchronizations.
+It is sufficiently \emph{detailed} that we have a formal
+instantiation of it (in Coq) for the CompCert Clight language
+(and embed the CompCert Clight sequential operational semantics),
+and a formal instantiation of CompCert assembly languages such as x86 (in both 32 and 64-bit modes).
+%
+%The contributions of this thesis, listed below, are strongly motivated and driven 
+%by the other parts of the top-to-bottom work, listed further down; 
+%namely, item (a) shows that the CPM is an expressive formal model when
+%viewed from above in Clight and item (b) shows that it is useful when viewed from below, in assembly. 
+%The development of item (1) below, was done in collaboration with the authors of items (a) and (b),
+%as listed there.
+
+\paragraph{Contributions of this thesis.}
+\begin{enumerate}
+\item We formalize the \emph{Concurrent Permission Machine}, an
+  operational model of execution of C, of assembly language, or any
+  language in the CompCert chain of intermediate languages.  The CPM
+  abstraction is designed to capture the intent of the C11 standard with respect to lock-based concurrency;
+  and be friendly to reasoning about the correctness of optimizing compilers.
+  It has cooperative concurrency, and virtual ``permissions'' that
+  enforce noninterference between threads.  Each thread's execution
+  can be reasoned about while largely ignoring the existence of other threads.
+%
+%\item The CPM separates sequential semantics from concurrent semantics: the behavior of synchronization operations is specified once and for all, while the sequential semantics is instantiated with the semantics of each language. This lets us reuse the CompCert definitions of Clight and assembly semantics, and also leads to a modular way of specifying compiler correctness: we show that threads in well-synchronized programs respect each other's permissions, and describe how this property, in combination with a sequential correctness proof for an optimization, should guarantee the optimization's correctness on concurrent programs.
+
+\item We show how the CPM model enables modular specification of
+  concurrent compiler correctness that transports safety and partial
+  correctness of multithreaded C programs to assembly code using the
+  model of cooperative concurrency. The CPM separates sequential 
+  semantics from concurrent semantics, so reasoning about the
+  semantics of concurrent programs can be kept separate from correctness
+  proofs of compiler optimizations. In particular, this modular approach allows 
+  us to reuse existing proofs of compiler correctness for sequential code.
+  
+    
+\item We apply our framework to CompCert, a proven correct compiler for 
+	sequential code. With minimal modifications of the CompCert code, we lift its specifications 
+	and proofs into CPMCompCert, a proven correct compiler that supports
+	concurrency. The semantic model of CPMCompCert is the CPM, and is compatible with the 
+	other parts of the top-to-bottom proof (in Coq).    
+
+\end{enumerate}
+
+
+\paragraph{Other contributions of the top-to-bottom correctness work.}  My proof of compiler correctness for the CPM is strongly motivated by the work of my colleagues showing that, at the source level, Concurrent Separation Logic is sound with respect to the CPM; and at the machine-language level, the CPM is correct on multicore machines.  
+
+\begin{enumerate}
+
+\item[(a)] The Clight-instantiated CPM model is sufficiently expressive to
+  capture user-level reasoning principles, by giving (in Coq) a
+  soundness proof for a modern concurrent separation logic (CSL) that
+  supports first-class (dynamically creatable) threads and locks and
+  ``ghost state'' that can express concurrency-interaction protocols.
+  The CSL logic and its semantic model build on those of the Verified Software Toolchain (VST)~\cite{appel14:plcc}, a framework for proving correctness of C programs in Coq, and
+  it is demonstrated that users can apply the CSL to their programs
+  using VST's existing proof automation system. The proof of CSL-to-CPM 
+  was done by Jean-Marie Madiot, William Mansky, and Andrew W. Appel, 
+  inspired by earlier work by Hobor, Zappa Nardelli, and Appel \cite[aplas paper, hobor thesis].
+  
+\item[(b)] Safety and correctness of a assembly-language CPM
+  execution entails similar properties for fine-grained interleaving,
+  and any instruction-level interleaved execution of the program
+  is well synchronized.  Therefore, all
+  executions of the program on a machine with relaxed memory semantics
+  will have the same behavior as in the CPM. This proof (in Coq) was primarily developed by Nick Giannarakis with assistance from Lennart Beringer.
+  
+\end{enumerate}
+
+The idea behind the Concurrent Permission Machine is to lift the single-processor operational semantics into a
+multiprocessor operational semantics, with multiple \emph{local}
+thread-states sharing a single memory.
+Our innovation is to add a
+per-thread
+\emph{permission map}---a mapping from address to permissions---such
+that no two threads have competing permissions at the same address.
+%Synchronization operations (lock acquire/release) change the permission maps, guided by an \emph{angelic oracle}.
+A thread is \emph{stuck} if it tries to read address $a$ without read permission,
+or write without write permission---so races are impossible in nonstuck executions.
+Acquiring a lock \emph{increases}
+the thread's permissions at some set of addresses; releasing a lock
+\emph{decreases} permissions.  Which permissions are increased or
+decreased?  Intuitively, the lock controls access to some shared
+data; it is those addresses.
+And finally, these permission maps have no physical manifestation in the
+execution of a machine-language program---at the end we prove an
+erasure theorem.
+
+\paragraph{CPM versus race-freedom.}  It is conventional to ask, ``is
+this execution data-race-free?''  As this property refers to the whole
+execution trace of a program we believe that it is an overly complex
+invariant to propagate through a compiler-correctness proof.  Our
+Concurrent Permission Machine establishes a simpler property:
+permission coherence.  From this, we prove that executions in the CPM
+are \emph{well synchronized}---nonatomic accesses are regulated by
+locks and the lock operations are used properly. Owens \cite[Theorem
+2]{owens10:ecoop} and Batty \cite[pg. 178, Theorem 13]{Batty:PhD} have
+notions of well synchronized programs for the TSO and C11 memory
+models respectively.  They prove that any behavior observed in a weakly 
+consistent execution (of a well synchronized program) can be observed 
+in some \emph{sequentially consistent} one.
+
+\paragraph{Concurrency primitives.} 
+We demonstrate proofs for programs with semaphores.  
+These are more general than
+``locks'' because they permit ``daring concurrency''
+\cite{ohearn07:tcs}
+in which thread 1 may acquire lock $A$, pass the ``hold'' of $A$
+to thread 2 by releasing lock $B$; then after thread 2 acquires $B$
+it may release $A$.  For example, our system supports this ``handshake''
+protocol:
+
+\begin{tabular}{l@{\qquad\qquad}l@{\qquad\qquad\qquad}l}
+    while (1) \{  & while (1) \{ \\
+    \quad acquire(A); & \quad acquire(B); &  \emph{p is a shared array,}
+ \\
+    \quad p[0]=x;     & \quad y=p[0];   & \emph{x and y are local variables}  \\
+    \quad release(B); & \quad release(A); \\
+    \}            & \}            \\
+  \end{tabular}
+
+\noindent In conventional terminology,
+``semaphores'' permit daring concurrency,
+but the thread that releases a ``lock'' must be the same thread that acquired it.
+We will use the terms interchangeably, to mean a semaphore that
+permits daring concurrency.
+
+In this work we support: thread spawn, lock creation/destruction, lock acquire, and
+lock release. We do not currently address lock-free concurrency, such as C11
+atomic load and store operations; but our
+separation logic extends to atomic operations \cite{mailbox}
+and we expect that the CPM
+extends as well; see \autoref{ch:futurework}.
+
+\paragraph{Why not use CSL directly?}
+Why is it useful to define the Concurrent Permission Machine abstraction?
+Could we not use separation logic directly in reasoning about
+compiler correctness, or in proving well-synchronization of
+executions?  The problem with that approach is that modern
+CSLs are quite complex: to represent higher-order features such
+as function-passing and dynamic lock creation, they have step-indexed
+models that manifest (in the logic) as modal operators and bifunctors;
+to model resource invariants that specify protocol-correctness
+(and not just safety) they have ``ghost resources'' in
+arbitrary partial commutative monoids.
+Step-indexed models and ghost resources would unnecessarily
+complicate reasoning about compiler optimizations (which may
+change the number of execution steps, and shouldn't interact with ghosts);
+and don't seem helpful in proving well-synchronization properties.
+The CPM abstracts all the higher-order separation logic into
+a first-order notion of permission coherence, directly useful in
+lower-level proofs. 
+
+
+
+
+
+%%% OLD STUFF REMOVE?
+%The main ultimate goal of this thesis is to create a modular way to prove compilers safe, even in the presence of concurrency. There are already several compilers proven safe, with machine checked proofs, that give guarantees for sequential programs. Instead of reinventing the wheel, I intend to leverage those proofs and use it to give guarantees for concurrent programs.
+%
+%On top of "just a compiler proof", our system is intended to be compatible with a realistic separation logic and usable on realistic machines like X86 TSO.
+%
+%The main result:
 
 
 

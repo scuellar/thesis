@@ -1,7 +1,37 @@
 \chapter{Top to Bottom structure \label{ch:topbottom}}
 
-Note. 
+The goal of this work is to connect the proofs of correctness of a source language, all the way to its correct execution in a real machine. We do this for a rich logic (CSL) to reason about a real language (C, via its high-level intermediate language Clight), through a realistic optimizing compiler (CompCert) and executing on a real weak-cache-consistent multicore processor (X86). Each of these parts has its own intricacies, so we aim to make our work modular. 
+
+The programmer shouldn't have to know anything about the compiler or the computer architecture. She wants to use the Dijkstra model of semaphores controlling access to shared data, perhaps using Hoare-style monitors, or using other patterns not limited to a simple mutex. A mutex is a semaphore that is always unlocked by the same thread that locked it; we also support more general synchronization patterns in which one thread acquires a semaphore that some other thread then releases. The programmer also wants to program as if in cooperative concurrency: a thread executes until it performs an explicit synchronization operation (such as semaphore acquire or release), and then some other thread might execute. She should not need to reason about interleavings of instructions. Not only are interleavings difficult to think about, but they are unsound: interleavings connote sequential consistency, and today's machines are not sequentially consistent. 
+
+The compiler designer shouldn't have to know anything about the concurrency libraries. She would like to pretend that there's only a single thread, and would like to ignore the nasty problem of weak cache consistency. Similarly, the compiler writer shouldn't need to know the details of the logic used to prove programs correct. He only needs to know a concrete semantics for the compiling languages.
+
+The Concurrent Permission Machine is the connecting thread of this top-to-bottom concurrency result; it provides the semantic interface to modularly compose the three main components of the framework. 
+We model a concurrent program as a list of threads,
+each with a local-variable (or register-bank) state,
+each with a permission-map (partial function from address
+to read/write permission), all sharing a single memory.
+The machine is equipped with a \emph{schedule}
+determining the order of thread execution.
+
+The structure of the entire project is as follows:
+
+
+\begin{enumerate}[leftmargin=\widthof{(Compiler)}+\labelsep, rightmargin=2cm] %Right margin looks pretty for small sentences. Remove if it gets longere.
+\item[(top)] Any C program, proven correct in Concurrent Separation Logic, runs correctly in the CPM. (Work by Madiot, Mansky, Appel)
+\item[(\textbf{Compiler})] The CompCert compiler preserves correctness of compiled programs with respect to the CPM semantics. (The contribution of this thesis)
+\item[(bottom)] Safe executions of the CPM, in the compiled program, run correctly on X86 machines. (Work by Giannarakis and Beringer)
+\end{enumerate}
+
+Putting it all together, our main theorem is a top-to-bottom preservation of correctness,
+\begin{theorem}[Informal Main Theorem]\label{mainthm}
+A correct C program, compiled by CompCert, runs correctly in an X86 machine.
+\end{theorem}
+
+In the result we present here, we go down as far as assembly language, not machine language; this is because no one has formalized the assembly-to-machine level of CompCert. The preservation of \emph{safety} we prove includes: no execution of undefined instructions or loading from inaccessible memory; no violations of the spinlock well-synchronized property. Owens \cite{owens10:ecoop} proved that a spinlock-well-synchronized execution behaves correctly on a TSO (total-store-order) weakly consistent multiprocessor; Giannarakis has generalized Owens's definition of spinlock-well-synchronized to a stronger property that ensures correct execution on other weakly consistent architecture (see \autoref{sec:weak}). Correctness means that any finite prefix of the trace of input-output communications satisfies a specification; the compiler is shown to preserve this traces (up to memory rearrangements by the compiler, \autoref{sec:compcert-mem}). In \autoref{sec:topbottomdefs} we formalize how this preservation of traces translates to correctness, but this has not yet been implemented in Coq.
+
+In the rest of this chapter, we will present the details of the main theorem and describe the CPM formally. In chapters \ref{sec:asm_proofs} and \ref{sec:CSLsound}, we describe the parts of the top-to-bottom proof that are not developed in this thesis. 
 
 \input{ch-topbottom/topbottom_theorem}
 \input{ch-topbottom/CPM}
-\input{ch-topbottom/limitations}
+%\input{ch-topbottom/limitations}

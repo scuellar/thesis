@@ -1,7 +1,63 @@
-\section{Memory events.}
+\section{Memory events.}\label{sec:memevents}
 
-The visible behavior of the CompCert semantics (for all languages) is a trace of events, as described in \ref{code:oldevents}. It records interactions with the outside world; for example, the results of a read system call will record a \Coqcode{Event_syscall} together with the name of the system call, its parameters, and its result. The only pointers that can appear in the trace are locations of global variable. As we explained above, these events are insufficient to capture the behavior of \Ccode{incr} in \ref{example:remember}. The events are also not sufficient to express any kind of behavior that depends on the memory. For example, a call to \Ccode{pthread_mutex_ulock(&l)} not only changes the state of the lock \Ccode{l}, conceptually it gives away control to the data in memory protected by \Ccode{l}. Such behavior that reveals locations in memory cannot be expressed in CompCert events that can't have pointers on them (except the location of global variables). More generally, these events are poorly suited to express any sort of shared memory interactions, such as concurrency or separated compilation. 
-\begin{table}\centering
+The observable behavior of the CompCert semantics (for all languages) is a trace of events, as described in \autoref{code:oldevents}. It records interactions with the outside world; for example, the results of a read system call will record an \Coqcode{Event_syscall} together with the name of the system call, its parameters, and its result. Lets consider a system call \Ccode{putbuf(void *a)} that takes a pointer to a buffer and reads from it. In \autoref{fig:undefoutput}(a), \Ccode{a} points to the value $3$ and \Ccode{putbuf} then reads that value.
+What other contents \Ccode{x} can a program put in \Ccode{a} and communicate to \Ccode{putbuf}? 
+
+We already mentioned that \Ccode{x} must not be a pointer in CompCert (other than a global pointer), such as in \autoref{fig:undefoutput}(b), ``because these are not preserved literally during compilation"\cite{Leroy-Compcert-CACM}. %from code in Events.v
+In fact, for this reason, \compcert\ doesn't have any event that exposes memory state or pointer values. Unfortunately, this limitation rules out several reasonable programs such as one calling \Ccode{incr} (\autoref{example:remember}) and the one in \autoref{fig:undefoutput}(b), moreover, these events are poorly suited to express any sort of shared memory interactions, such as concurrency or separate compilation. For example, a call to \Ccode{pthread_mutex_ulock(l)} not only changes the state of the lock \Ccode{l}, conceptually it gives away control to the data in memory protected by \Ccode{l}. The location and the content of the data might expose memory state, so it cannot be expressed in \compcert\ semantics. 
+
+Can \Ccode{x} be an uninitialized value? The answer here is also no. %In other words, the semantics of \Ccode{putbuf} cannot step if the contents of \Ccode{a} are \Coqcode{Vundef}. 
+It turns out that uninitialized values also ``reveal memory state" in a subtle way that we explain with the example in \autoref{fig:undefoutput}(c). In the source code \Ccode{x} is not initialized so, in the semantics of Clight, the content of \Ccode{a} is \Coqcode{Vundef}. However, after register allocation \Ccode{x} and \Ccode{y} might share a register, in which case the content of \Ccode{a} will be $3$. It is certainly reasonable to require that programs must not communicate uninitialized variables to the external world; it can be a security risk. But output is not always going to the external world. If \Ccode{putbuf} was a verified library, it would be acceptable to reveal undefined values to it. For another example, consider the code in \autoref{fig:undefoutput}(d). In this case the code is part of a multithreaded program communicating through a semaphore \Ccode{l}. In this case, again, it would be acceptable to reveal undefined values.
+
+\begin{figure}\centering
+\begin{multicols}{4}
+\begin{lstlisting}[language=C]
+x = 3;
+*a = x;
+putbuf(a);
+\end{lstlisting}
+
+(a)
+
+\begin{lstlisting}[language=C]
+y = 3;
+x = &y;
+*a = x;
+putbuf(a);
+\end{lstlisting}
+
+(b)
+
+\begin{lstlisting}[language=C]
+y = 3;
+z = y + 1;
+*a = x;
+putbuf(a);
+\end{lstlisting}
+
+(c)
+
+\columnbreak
+\begin{lstlisting}[language=C]
+y = 3;
+z = y + 1;
+*a = x;
+pthread_mutex_ulock(l);
+\end{lstlisting}
+
+(d)
+\end{multicols}
+\caption[Code examples: passing output though a buffer.]{Four excerpts of code passing output through buffer \Ccode{a}.}
+\label{fig:undefoutput}
+\end{figure}
+
+It is worth pointing out that we could forbid undefined variables from the trace. This would indeed make the compiler specification simpler and it's verification easier. We can also describe and verify those properties of our programs using VST\cite{appel14:plcc}. However, doing so would rule out some reasonable programs that we would like to verify (such as  the one in \autoref{fig:undefoutput}(b)) and it would add more complexity for the user who has to prove source programs correct. 
+ 
+
+
+
+
+\begin{figure}\centering
 \begin{multicols}{2}
 \begin{lstlisting}
 Inductive event: Type :=
@@ -33,15 +89,87 @@ Inductive mem_effect: Type :=
 	\
 	
 \end{multicols}
-\caption{The new events in CompCert:  \Coqcode{mem_effect} reflects changes to memory and \Coqcode{delta_perm_map} represents transfer of \Coqcode{Cur} permissions.}\label{code:newevents}
-\end{table}
-We propose to include 2 new types of events which we call \emph{memory events} as described in table \ref{code:newevents}. As their name suggests, they contain references to locations in memory, beyond the global variables.  
+\caption[New events in CompCert]{The new events in CompCert:  \Coqcode{mem_effect} reflects changes to memory and \Coqcode{delta_perm_map} represents transfer of \Coqcode{Cur} permissions.}\label{code:newevents}
+\end{figure}
+
+We propose to include 2 new types of events which we call \emph{memory events} as described in \autoref{code:newevents}. As their name suggests, they expose the state of memory and they expose pointer values.  
 %Acquire release
-The first one, \Coqcode{Event_acq_rel}, represents a generic memory interactions where the external function performs some arbitrary changes to memory, recorded by a list of \Coqcode{mem_effect}s, and transfers some permissions recorded by \Coqcode{delta_perm_map}. We find it convenient to split the effects on memory as those that happen before the changes in permissions and those that happen after. 
+The first one, \Coqcode{Event_acq_rel}, represents a generic memory interaction where the external function performs some arbitrary changes to memory, recorded by a list of \Coqcode{mem_effect}s, and transfers some permissions recorded by \Coqcode{delta_perm_map}. %We find it convenient to split the effects on memory as those that happen before the changes in permissions and those that happen after. 
 %Event spawn
-The second one,  \Coqcode{Event_spawn}, represents the creation of a new thread or a new module. It records the function being called, as a block number, and the change in permissions by two \Coqcode{delta_perm_map}, one representing the permissions given and the other the starting permissions of a new thread/module.
+The second one,  \Coqcode{Event_spawn}, represents the creation of a new thread or a new module. It records the function being called, as a block number, and the change in permissions by two \Coqcode{delta_perm_map}s, one representing the permissions given and the other the starting permissions of a new thread/module. Notice that, in the \Coqcode{mem_effect}s, \Coqcode{Write} contains a list of \Coqcode{memvals}, which can be uninitialized (i.e., \Coqcode{Undef}).   In the example \autoref{fig:undefoutput}(d), the \Coqcode{Event_acq_rel} would have the \Coqcode{mem_effect}, \Coqcode{Write(\&a,Undef)}.
 
-The correctness of the CompCert compiler is formulated as a preservation of traces. However, if our traces contain memory events and the memory can be reordered by compilation, the trace must be reordered accordingly. Thus our new correctness will be formulated up to memory reordering as shown in \ref{sec:step_diagram_sim}. In fact, if a compiler pass (or passes) don't change the order of memory (such as equality and extension passes), then the trace is preserved and nothing changes in the simulation. If the pass changes the order of memory according to some $j$, then we need show that the source and target traces,$t$ and $t'$, are related by \Coqcode{inject_trace_strong j t t'} (denoted $t \overset{j'}{\hookrightarrow} t'$). That means that events in $t$ and $t'$ are identical except all memory locations are reordered according to $j$. To add this property, we need simulations to expose how they reorder memory. The full description of our new conjunctive simulation will be explained in section \ref{sec:compcert-sim}.
+The correctness of the CompCert compiler is formulated as a preservation of traces. However, our new traces expose the state of memory, which is not identically preserved. Fortunately, we know that compilation preserves an injection of the memories, so we can state the CompCert correctness as a preservation of traces, up to some rearrangement by an injection. 
+%In what remains of this section, we explain the injection relation between traces $t \injarrow{j} t'$ that is preserved by compilation. 
+We define the injection relation for \Coqcode{mem_effects}  in \autoref{fig:eventinj}(d), from where the injection relation for traces can be derived. The full simulation, with the injection-related traces, will be later explained in \autoref{sec:compcert-sim}.
+
+% old explanation of what happened with traces and Vundef's
+%Compilers not only reorder memory; sometimes undefined values in the source program are mapped to concrete values in the target. Such mappings are useful in compiler passes such as register coalescing, where local variables that were previously uninitialized, can now map to an initialized one with concrete values. The predicate \Coqcode{inject_trace_strong} always maps undefined values to undefined values. This is a reasonable restriction since inspecting undefined values is not an allowed behavior, so they shouldn't appear in the trace.\footnote{Local variables whose contents go from Vundef to Vint during the register-allocation phase must have been nonaddressable local variables in the Clight source program; therefore their addresses could not have been passed to external functions, and they won't appear in event traces.  Therefore this restriction does not obstruct the specification/proof of the register-allocation phase, or of any CompCert phase.} However, if an application required traces with undefined values, we can still support that. It turns out that it is enough to prove that the execution with the \emph{strongly injected} trace is safe, and from it we can derive save executions for all traces that have some undefined values defined.
 
 
-Compilers not only reorder memory, sometimes undefined values in the source program are mapped to concrete values in the target. Such mappings are useful in compiler passes such as register coalescing, where registers that were previously uninitialized, can now map to an initialized register with concrete values. The predicate \Coqcode{inject_trace_strong} always maps undefined values to undefined values. This is a reasonable restriction since inspecting undefined values is not an allowed behavior, so they shouldn't appear in the trace. However, if an application required traces with undefined values, we can still support that. It turns out that it is enough to prove that the execution with the \emph{strongly injected} trace is safe, and from it we can derive save executions for all traces that have some undefined values defined.
+\def\vals{\text{vals}}
+\def\nil{\text{nil}}
+ \begin{figure}\centering
+ %\begin{multicols}{2}
+
+
+%\columnbreak
+\fbox{
+\begin{mathpar}
+\inference{j\ b_1 = \text{Some}\ (b_2, \delta) \and \text{lo}_2 = \text{lo}_1 + \delta \and  \text{hi}_2 = \text{hi}_1 + \delta}{ (b_1,\text{lo}_1, \text{hi}_1) \injarrow{j} (b_2,\text{lo}_2, \text{hi}_2)}
+\end{mathpar}}
+
+(a) Injection of ranges.
+
+\
+
+\fbox{
+\begin{mathpar}
+\and\inference{}{\nil \strinjarrow{j} \nil}
+\and
+\inference{\text{ls}_1 \strinjarrow{j} \text{ls}_2 \and x_1 \strinjarrow{j} x_2 }{x_1 ::\text{ls}_1 \injarrow{j} x_2::\text{ls}_2}
+\goodbreak
+\inference{}{\nil \injarrow{j} \nil}
+\and
+\inference{\text{ls}_1 \injarrow{j} \text{ls}_2 \and x_1 \injarrow{j} x_2 }{x_1 ::\text{ls}_1 \injarrow{j} x_2::\text{ls}_2}
+\end{mathpar}}
+
+(b) Injection of lists (for any type that has an injection relation)
+
+\
+
+\fbox{
+\begin{mathpar}
+\inference{  (b_1,\text{lo}_1, \text{hi}_1) \injarrow{j} (b_2,\text{lo}_2, \text{hi}_2) }{\text{Alloc}\ b_1 \ \text{lo}_1\ \text{hi}_1 \strinjarrow{j} \text{Alloc}\ b_2 \ \text{lo}_2\ \text{hi}_2 }
+\and
+\inference{j\ b_1 = \text{Some}\ (b_2, \delta) \and \text{locs}_1 \injarrow{j} \text{locs}_2}{\text{Free}\ b_1 \ \text{locs}_1 \strinjarrow{j} \text{Free}\ b_2 \ \text{locs}_2 }
+\and
+\inference{j\ b_1 = \text{Some}\ (b_2, \delta) \and \vals_1 \strinjarrow{j} \vals_2}{\text{Write}\ b_1 \ \vals_1 \strinjarrow{j} \text{Write}\ b_2 \ \vals_2 }
+\end{mathpar}}
+
+\
+
+(c) Strong injection of \Coqcode{mem_effects}
+
+\
+
+\fbox{
+\begin{mathpar}
+\inference{  \text{me}_1 \strinjarrow{j} \text{me}_2 }{ \text{me}_1 \injarrow{j} \text{me}_2 }
+\and
+\inference{j\ b_1 = \text{Some}\ (b_2, \delta) \and \vals_1 \injarrow{j} \vals_2}{\text{Write}\ b_1 \ \vals_1 \injarrow{j} \text{Write}\ b_2 \ \vals_2 }
+\end{mathpar}}
+
+\
+
+(d) Regular injection of \Coqcode{mem_effects}
+
+%\end{multicols}
+\caption[More injection relations]{More injection relations, including strong and regular injections for \Coqcode{mem_effects}. Strong injections (%$\injarrow{}$
+) can only map \Coqcode{Vundef} values to themselves, while injections (%$\injarrow{}$
+) can map. }\label{fig:eventinj}
+\end{figure}
+
+
+The injection relation for values, defined by \compcert,  is not deterministic (i.e. it's does not represent a function). As shown in \autoref{fig:valueinj_perminj}(a), the value \Coqcode{Vundef} can be injected to any other value. Consequently, the injection relations for memories, for \Coqcode{mem_effects}, for events and for traces are not deterministic. We do, however, include in all of those definitions a stronger notion of injection relations named \emph{strong injection}, denoted by $\strinjarrow{}$, which is determinisitic. 
+
+We discuss simulations for traces with non deterministic relations in \autoref{sssec:fixsim}. 

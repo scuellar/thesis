@@ -1,0 +1,1 @@
+To derive a core semantics from a MOIST semantics do the following: (1) construct the new states with \lstinline{fun st:state => (st, get_mem st) }, (2) derive a new step relation that doesn't step when it is \Coqcode{at\_external}, and (3) define an \Coqcode{after\_external}.  (1) and (2) are done automatically. ^^E^^L 

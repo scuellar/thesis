@@ -38,6 +38,224 @@ Eidgen\"ossische Technische Hochschule}}
 @string{ACMPRESS="ACM Press"}
 @string{ACMADDRESS="New York, NY, USA"}
 
+%% RELATED WORK
+
+@phdthesis{stewart15:phd,
+author = "James Gordon Stewart",
+title = "Verified Separate Compilation for {C}",
+school = "Princeton University",
+address = "Princeton, NJ",
+month = jun,
+year = "2015"
+}
+
+@article{Iris-weak, 
+title={Strong logic for weak memory: Reasoning about release-acquire consistency in iris.}, 
+journal={In 31st European Conference on Object-Oriented Programming (ECOOP 2017)}, 
+author={Jan-Oliver Kaiser and Hoang-Hai Dang and Derek Dreyer and  Ori Lahav and Viktor Vafeiadis}, 
+year={2017}}
+
+@inproceedings{memarian16,
+ author = {Memarian, Kayvan and Matthiesen, Justus and Lingard, James and Nienhuis, Kyndylan and Chisnall, David and Watson, Robert N. M. and Sewell, Peter},
+ title = {Into the Depths of {C}: Elaborating the de Facto Standards},
+ booktitle = {PLDI'16: 37th ACM SIGPLAN Conference on Programming Language Design and Implementation},
+ year = {2016},
+ isbn = {978-1-4503-4261-2},
+ pages = {1--15},
+ numpages = {15},
+ url = {http://doi.acm.org/10.1145/2908080.2908081},
+ doi = {10.1145/2908080.2908081},
+ acmid = {2908081},
+ publisher = {ACM},
+} 
+
+@inproceedings{Dodds18,
+ author = {Mike Dodds and Mark Batty and Alexey Gotsman},
+ title = {Compositional Verification of Compiler Optimisations on Relaxed Memory.},
+ booktitle = {European Symposium on Programming},
+ year = {2018},
+ pages = {1027-1055},
+ publisher = {Springer},
+} 
+
+@InProceedings{Vafeiadis13compcertTSO,
+author="Jaroslav Sevcik and Viktor Vafeiadis and Francesco Zappa Nardelli and Suresh Jagannathan and Peter Sewell.",
+title="{CompCertTSO}: A verified compiler for relaxed-memory concurrency.",
+booktitle="Journal of the ACM (JACM)",
+year="2013",
+pages="60(3)",
+}
+
+@article{sepcomp, 
+title={Lightweight verification of separate compilation}, 
+DOI={10.1145/2837614.2837642}, 
+journal={Proceedings of the 43rd Annual ACM SIGPLAN-SIGACT Symposium on Principles of Programming Languages - POPL 2016}, 
+author={Jeehoon Kang and Kim, Yoonseung and Hur, Chung-Kil and Dreyer, Derek and Vafeiadis, Viktor}, 
+year={2016}}
+
+@article{Anton2017promising, 
+title={Promising Compilation to {ARM}v8.3}, volume={29}, 
+DOI={10.15514/ispras-2017-29(5)-9}, 
+number={5}, 
+journal={Proceedings of the Institute for System Programming of the RAS}, 
+author={Anton V. Podkopaev and Ori Lahav and Viktor Vafeiadis}, 
+year={2017}, 
+pages={149-164}}
+
+@article{Kang2017promising, 
+title={A promising semantics for relaxed-memory concurrency}, volume={29}, 
+journal={Proceedings of the 44th annual ACM SIGPLAN-SIGACT symposium on Principles of Programming Languages - POPL 17}, 
+author={Jeehoon Kang and Chung-Kil Hur and Ori Lahav and Viktor Vafeiadis and Derek Dreyer.}, 
+year={2017}}
+
+@article{Anton2019promising, 
+title={Bridging the gap between programming languages and hardware weak memory models.}, 
+journal={Proceedings of the ACM on Programming Languages 3, no. POPL}, 
+author={Anton V. Podkopaev and Ori Lahav and Viktor Vafeiadis}, 
+year={2019}}
+
+@article{jagannathan2013, 
+title={Atomicity refinement for verified compilation}, 
+DOI={10.1145/2594291.2594346}, 
+journal={Proceedings of the 35th ACM SIGPLAN Conference on Programming Language Design and Implementation - PLDI 14}, 
+author={Jagannathan, Suresh and Petri, Gustavo and Vitek, Jan and Pichardie, David and Laporte, Vincent}, 
+year={2013}}
+
+@article{zhao2012, 
+title={Formalizing the LLVM intermediate representation for verified program transformations}, 
+DOI={10.1145/2103656.2103709}, 
+journal={Proceedings of the 39th annual ACM SIGPLAN-SIGACT symposium on Principles of programming languages - POPL 12}, 
+author={Zhao, Jianzhou and Nagarakatte, Santosh and Martin, Milo M.k. and Zdancewic, Steve}, 
+year={2012}}
+
+@article{zhao2013, 
+title={Formal verification of SSA-based optimizations for LLVM}, 
+DOI={10.1145/2491956.2462164}, 
+journal={Proceedings of the 34th ACM SIGPLAN conference on Programming language design and implementation - PLDI 13}, 
+author={Zhao, Jianzhou and Nagarakatte, Santosh and Martin, Milo M.k. and Zdancewic, Steve}, 
+year={2013}}
+
+
+%% END RELATED WORK
+
+%% OTHER ADDED BY Santiago Cuellar
+
+@inproceedings{owens10:ecoop,
+  title={Reasoning about the implementation of concurrency abstractions on {x86-TSO}},
+  author={Owens, Scott},
+  booktitle={ECOOP 2010: 24th European Conference on Object-Oriented Programming},
+  pages={478--503},
+  year={2010},
+  publisher={Springer}
+}
+
+
+@phdthesis{Batty:PhD,
+  author = {Mark John Batty},
+  title = {The C11 and C++11 Concurrency Model},
+  school = {University of Cambridge},
+  year = {2014},
+  optkey = {},
+  opttype = {},
+  optaddress = {},
+  optmonth = {},
+  note = {2015 SIGPLAN John C. Reynolds Doctoral Dissertation award
+and 
+2015 CPHC/BCS Distinguished Dissertation Competition winner},
+  optannote = {},
+  pdf = {https://www.cs.kent.ac.uk/people/staff/mjb211/docs/toc.pdf},
+  abstract = {
+Relaxed-memory concurrency is now mainstream in both hardware and programming
+languages, but there is little support for the programmer of such systems. In this highly
+non-deterministic setting, ingrained assumptions like causality or the global view of memory
+do not hold. It is dangerous to use intuition, specifications are universally unreliable,
+and testing outcomes are dependent on hardware that is getting more permissive of odd
+behaviour with each generation. Relaxed-memory concurrency introduces complications
+that pervade the whole system, from processors, to compilers, programming languages
+and software.
+
+There has been an effort to tame some of the mystery of relaxed-memory systems by
+applying a range of techniques, from exhaustive testing to mechanised formal specification.
+These techniques have established mathematical models of hardware architectures
+like x86, Power and ARM, and programming languages like Java. Formal models of these
+systems are superior to prose specifications: they are unambiguous, one can prove properties
+about them, and they can be executed, permitting one to test the model directly. The
+clarity of these formal models enables precise critical discussion, and has led to the discovery
+of bugs in processors and, in the case of Java, x86 and Power, in the specifications
+themselves.
+
+In 2011, the C and C++ languages introduced relaxed-memory concurrency to the
+language specification. This was the culmination of a six-year process on which I had a
+significant impact. This thesis details my work in mathematically formalising, refining
+and validating the 2011 C and C++ concurrency design. It provides a mechanised formal
+model of C and C++ concurrency, refinements to the design that removed major errors
+from the specification before ratification, a proof in HOL4 (for a restricted set of programs)
+that the model supports a simpler interface for regular programmers, and, in collaboration
+with others, an online tool for testing intuitions about the model, proofs that the language
+is efficiently implementable above the relaxed x86 and Power architectures, a concurrent
+reasoning principle for proving specifications of libraries correct, and an in-depth analysis
+of problems that remain in the design.},
+  topic = {c11}
+}
+
+@article{mailbox,
+ author = {Mansky, William and Appel, Andrew W. and Nogin, Aleksey},
+ title = {A Verified Messaging System},
+ journal = {Proc. ACM Program. Lang.},
+ issue_date = {October 2017},
+ volume = {1},
+ number = {OOPSLA},
+ month = oct,
+ year = {2017},
+ issn = {2475-1421},
+ pages = {87:1--87:28},
+ articleno = {87},
+ numpages = {28},
+ url = {http://doi.acm.org/10.1145/3133911},
+ doi = {10.1145/3133911},
+ acmid = {3133911},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+ keywords = {concurrent separation logic, shared-memory communication, shared-memory concurrency},
+} 
+
+@inproceedings{jung2015iris,
+  title={Iris: Monoids and invariants as an orthogonal basis for concurrent reasoning},
+  author={Jung, Ralf and Swasey, David and Sieczkowski, Filip and Svendsen, Kasper and Turon, Aaron and Birkedal, Lars and Dreyer, Derek},
+  booktitle="42nd ACM Symposium on Principles of Programming Languages (POPL'15)",
+  pages={637--650},
+  year={2015},
+  organization={ACM}
+}
+
+@incollection{leroy14:mem,
+title="The {CompCert} Memory Model",
+author="Xavier Leroy and Andrew W. Appel and Sandrine Blazy and Gordon Stewart",
+booktitle="Program Logics for Certified Compilers",
+editor="Andrew W. Appel",
+chapter=32,
+publisher="Cambridge University Press",
+year=2014,
+crossref ={appel14:plcc}
+}
+
+@inproceedings{gu18:ccal,
+title= "Certified Concurrent Abstraction Layers",
+author= {Ronghui Gu and Zhong Shao and Jieung Kim and Xiongnan (Newman) Wu and J\'er\'emie Koenig and Vilhelm Sj\"oberg and Hao Chen and David Costanzo and Tahina Ramananandro},
+booktitle= "ACM SIGPLAN Conference on Programming Language Design and Implementation (PLDI'18)",
+pages="646-661",
+month=jun,
+year=2018}
+
+
+@inproceedings{cohen09:tphols,
+title= "{VCC:} A Practical System for Verifying Concurrent {C}",
+author= "Ernie Cohen and Markus Dahlweid and Mark Hillebrand and Dirk Leinenbach and Micha\l{} Moskal and Thomas Santen and Wolfram Schulte and Stephan Tobies",
+booktitle="22nd International Conference on Theorem Proving in Higher Order Logics (TPHOLs 2009), LNCS 5674",
+year=2009}
+
+%% END OF Santiago's addition
+
 @InProceedings{beringer11:relational,
 author="Beringer, Lennart",
 title="Relational Decomposition",
@@ -48,8 +266,6 @@ address="Berlin",
 pages="39--54",
 isbn="978-3-642-22863-6"
 }
-
- 
 
 @inproceedings{YeEtAl:CCS2017,
   title   = {Verified Correctness and Security of{ mbedTLS HMAC-DRBG}},
@@ -811,9 +1027,9 @@ month=jun,
 year=2014}
 
 @inproceedings{jiang14:pldi, 
-title={"Towards certified separate compilation for concurrent programs."},
-author={"Jiang, Hanru and Hongjin Liang and Siyang Xiao and Junpeng Zha and Xinyu Feng"},
-booktitle={"Proceedings of the 40th ACM SIGPLAN Conference on Programming Language Design and Implementation."},
+title={Towards certified separate compilation for concurrent programs.},
+author={Jiang, Hanru and Hongjin Liang and Siyang Xiao and Junpeng Zha and Xinyu Feng},
+booktitle={Proceedings of the 40th ACM SIGPLAN Conference on Programming Language Design and Implementation.},
 year={2019}}
 
 @incollection{greenaway2012bridging,
@@ -912,24 +1128,13 @@ day=15, month=sep, year=2013}
 
                  
 @inproceedings{compcomp,
-  title={Compositional compcert},
+  title={Compositional {CompCert}},
   author={Stewart, Gordon and Beringer, Lennart and Cuellar, Santiago and Appel, Andrew W},
   booktitle={POPL},
   volume={50},
   pages={275--287},
   year={2015},
   organization={ACM}
-}
-
-@incollection{leroy14:mem,
-title="The {CompCert} Memory Model",
-author="Xavier Leroy and Andrew W. Appel and Sandrine Blazy and Gordon Stewart",
-booktitle="Program Logics for Certified Compilers",
-editor="Andrew W. Appel",
-chapter=32,
-publisher="Cambridge University Press",
-year=2014,
-crossref ={appel14:plcc}
 }
 
 @inproceedings{bsda:esop2014,
@@ -939,7 +1144,7 @@ crossref ={appel14:plcc}
  year = {2014},
   publisher = {Springer},
   series    = {Lecture Notes in Computer Science},
- note = {To appear.}
+ pages = {107--127}
 } 
 @inproceedings{percontiahmed:esop2014,
  author = {James T. Perconti and Amal Ahmed},
@@ -1017,6 +1222,15 @@ well.}
   url = {http://digbib.ubka.uni-karlsruhe.de/volltexte/1000028867},
   doi = {10.5445/KSP/1000028867},
 }
+
+@phdthesis{dockinsthesis,
+  title = {Operational refinement for compiler correctness},
+  year = {2012},
+  month = jul,
+  author = {Dockins, Robert W. },
+  school = {Princeton University},
+}
+
 
 @inproceedings{hur2011kripke,
   title={A {K}ripke logical relation between {ML} and assembly},
@@ -1156,7 +1370,7 @@ year = "2014"
 
 @inproceedings{Ronghui15abstractionlayers,
   title={Deep Specifications and certified abstraction layers.},
-  author={Gu, Ronghui and Jeremie Koenig and Tahina Ramananandro and Zhong Shao and Xiongnan Newman Wu and Shu-Chun Weng and Haozhong Zhang and and Yu Guo.},
+  author={Ronghui Gu and Jeremie Koenig and Tahina Ramananandro and Zhong Shao and Xiongnan Newman Wu and Shu-Chun Weng and Haozhong Zhang and Yu Guo.},
   booktitle={POPL},
   pages={595-608},
   year={2015},
@@ -10046,8 +10260,7 @@ year = "2008"}
 
 @misc{leroy19:compcert,
   author = {Xavier Leroy},
-  title = {The {CompCert} verified compiler, 
-                 software and ann. proof},
+  title = {The {CompCert} verified compiler, software and annotated proof},
   month = "March",
   year = 2019,
   xtopic = {compcert},
@@ -10854,3 +11067,31 @@ doi="10.1007/978-3-662-54434-1_22",
 url="https://doi.org/10.1007/978-3-662-54434-1_22"
 }
 
+@article{batty2011mathematizing,
+  title={Mathematizing {C++}x concurrency},
+  author={Batty, Mark and Owens, Scott and Sarkar, Susmit and Sewell, Peter and Weber, Tjark},
+  journal={ACM SIGPLAN Notices},
+  volume={46},
+  number={1},
+  pages={55--66},
+  year={2011},
+  publisher={ACM}
+}
+
+@inproceedings{adve90drf,
+ author = {Adve, Sarita V. and Hill, Mark D.},
+ title = {Weak Ordering---a New Definition},
+ booktitle = {Proceedings of the 17th Annual International Symposium on Computer Architecture},
+ series = {ISCA '90},
+ year = {1990},
+ isbn = {0-89791-366-3},
+ location = {Seattle, Washington, USA},
+ pages = {2--14},
+ numpages = {13},
+ url = {http://doi.acm.org/10.1145/325164.325100},
+ doi = {10.1145/325164.325100},
+ acmid = {325100},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+ keywords = {sequential consistency, shared-memory multiprocessor, weak ordering},
+} 

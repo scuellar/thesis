@@ -1,5 +1,85 @@
-\section{Compiler Theorem \label{sec:compilerthm}}
+\section{Compiler Specification \label{sec:compilerthm}}
 
-Here goes the compiler theorem
+A compiler that correctly compiles a concurrent program, must preserve a simulation between the source and compiled programs, as CPM semantics. The simulation describes how executions relate on both program: it very explicitly shows that permissions transfers are preserved (up to injection) and that nonstuck programs compile to nonstuck programs. These CPM simulations are similar to MOIST simulations except, instead of differentiating external function calls, they differentiate steps executed by the machine (i.e. synchronization operations).
 
-\subsection{Self simulations}\label{sec:selfsim}
+We state that the CompCert compiler satisfies the specification of correctness given here and we prove that fact, in later sections of this chapter.   
+
+\begin{definition}[CPM simulation]\label{def:cpmsim} Two concurrent permission machines, $\text{CPM}_1$ and $\text{CPM}_2$ are in a simulation relation $\text{CPM}_1 \gtrsim \text{CPM}_2$ if there is a \emph{match relation} for states $\succsim$\footnote{We use the notation $\succsim$ for match relations of CPM states and $\sim$ for match relations of states in MOIST semantics.} and a well ordered measure such that
+
+\begin{enumerate}
+\item at each point of the execution, $\text{CPM}_1$ and $\text{CPM}_2$ have the same number of threads,
+\item at each point of the execution, $\text{CPM}_1$ and $\text{CPM}_2$ have the same running threads (i.e. local states marked with \matht{Run}),
+\item If $\text{CPM}_1$ halts (the schedule runs out), then so does $\text{CPM}_2$.
+\item The initial state in $\text{CPM}_1$ has a matching initial state in $\text{CPM}_2$, related by $\succsim$.
+\item Each core step in $\text{CPM}_1$ is simulated by some number of core steps in $\text{CPM}_2$, preserving the match relation $\succsim$ (as depicted in \cref{figure:cpmstepdiag}(a)). 
+If $\text{CPM}_2$ takes 0 steps, the measure decreases according to a well founded order.
+\item Each administrative step (\Coqcode{resume}, \Coqcode{suspend}, \Coqcode{stutter}, \Ccode{done}) in $\text{CPM}_1$ is simulated by an equivalent administrative step in $\text{CPM}_2$, preserving the match relation $\succsim$ (as depicted later in this chapter in \cref{figure:admitstepdiag}).
+\item Each synchronization step (\Coqcode{release}, \Coqcode{acquire}, \Coqcode{fail_acquire}, \Coqcode{spawn}, \Coqcode{make_lock}, \Ccode{free_lock}) in $\text{CPM}_1$ is simulated by an equivalent synchronization step in $\text{CPM}_2$, preserving the match relation $\succsim$ (as depicted in \cref{figure:cpmstepdiag}(b)). The produced events are equal, up to injection.
+\end{enumerate}
+\end{definition}
+
+ \begin{figure}\centering
+ \begin{multicols}{2}
+
+$$\exists\ \Sigma_2'\ j', j \sqsubseteq j' $$
+\begin{tikzcd}[column sep=tiny]
+\Sigma_1 \arrow[d, "\text{core}"']
+& \succsim_{j } & \Sigma_2 \arrow[d, dotted, "\text{core}", "*"'] \\
+\Sigma_1' & \succsim_{j' } & \Sigma_2'
+\end{tikzcd} 
+
+\
+
+\
+
+\
+
+\
+
+(a) Core steps
+
+\columnbreak
+
+$$\exists\ \Sigma_2'\ j' \delta_2, j \sqsubseteq j' $$
+\begin{tikzcd}[column sep=tiny]
+\Sigma_1 \arrow[d, "\text{sync } \delta_1"']
+& \succsim_{j } & \Sigma_2 \arrow[d, dotted, "\text{sync } \delta_2"] \\
+\Sigma_1' & \succsim_{j' } & \Sigma_2'
+\end{tikzcd} 
+$$\delta_1 \strinjarrow{j'} \delta_2$$
+
+(b) Synchronization steps 
+\end{multicols}
+\caption[CPM step diagrams]{CPM internal and synchronization step diagrams. The new core transition can be any number of steps but the synchronization steps happen in lock-step.}\label{figure:cpmstepdiag}
+\end{figure}
+
+The last three items in the definition of CPM simulation are the most difficult to prove, and we will spend significant portion of this chapter proving similar diagrams, such as the one depicted in \cref{figure:admitstepdiag}. For that, we spell out the details of a CPM step simulation diagram in the following definition. 
+
+\begin{definition}[CPM step diagram]
+Let $\succsim_{j}$ be a given match relation for CPM states and let $P$ describe some kind of CPM step, such as core, administrative or synchronization steps. Also, let there be two CPM states in a match relation, $\Sigma_1 \succsim_j \Sigma_2$. If $\Sigma_1$ takes a $P$ step to some $\Sigma_1'$, then $\Sigma_2$ takes some steps in $P$ to some $\Sigma_2'$ such that the match relation can be reestablished for a larger injection $\Sigma_1' \succsim_{j'} \Sigma_2'$.%   (as depicted in \cref{figure:admitstepdiag}).
+If the steps produce events, these events are injected by $j'$. If $\Sigma_2$ takes 0 steps, the measure decreases according to its well founded order.
+
+We say the diagram is in \emph{lockstep} if $\Sigma_2$ is required to take exactly one step.
+\end{definition}
+We will define a match relation $\succsim_{}$ for CPMs in \cref{def:CPMmatch} (with \cref{def:matchmarkedstates}), and we will use that relation for all the diagrams in this chapter.
+
+Following the previous definitions, the last three items in a of CPM simulation can be reworded as:
+\begin{enumerate}
+\item[5'.] The core steps of $\text{CPM}_1$ and $\text{CPM}_2$ form a simulation diagram. 
+\item[6'.] The administrative steps of $\text{CPM}_1$ and $\text{CPM}_2$ form a lockstep simulation diagram.
+\item[7'.] The synchronization steps of $\text{CPM}_1$ and $\text{CPM}_2$ form a lockstep simulation diagram.
+\end{enumerate}
+
+It is often important to prove that simulation relations, like the one in \cref{def:cpmsim}, are transitive, to achieve modularity. For example, the CompCert correctness proof uses transitivity of the simulation relation, to verify every compiler pass separately and then compose them into a full compiler simluation. Indeed, we can establish transitivity of \cref{def:cpmsim}, but we exploit it in a novel way to get  a new type of modularity (Compile One At a Time, \autoref{sec:coat}) in our compiler correctness proof. 
+
+\begin{lemma}\label{thm:simcompose}
+For all machines $\CPM_1, \CPM_2$ and $\CPM_3$, if $\CPM_1 \gtrsim \CPM_2$ and $\CPM_2 \gtrsim \CPM_3$  then $\CPM_1 \gtrsim \CPM_3$.
+\end{lemma}
+ 
+
+Armed with the definition of simulation for CPMs, we can state the specification of the CompCert compiler. The rest of this chapter describes the proof of how CompCert satisfies this specification. 
+
+\begin{theorem}[Compiler Correctness]\label{thm:compspec}
+Given a source program P and an x86 assembly language program Q obtained by CompCert compilation of P, the CPMs of the two programs are in a simulation relation:
+$$\CPM_{\text{Clight}}(\text{P}) \gtrsim \CPM_{\text{Asm}}(\text{Q})$$
+\end{theorem}

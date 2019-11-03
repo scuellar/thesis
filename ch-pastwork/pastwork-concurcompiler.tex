@@ -1,0 +1,62 @@
+\section{Compiler models supporting concurrency}
+\label{sec:concurcompiler}
+
+Podkopaev et al. \cite{Anton2017promising} have proven a compiler correct with respect to the \emph{promising semantics} of Kang et al. \cite{Kang2017promising}, which features a high-level relaxed model of memory. They compile down to ARMv8-POP and later to POWER, ARMv7 and ARMv8 \cite{Anton2019promising}. Their work focuses on the complexity of relaxed memory models, but does not reuse existing sequential compilers and has not been yet connected to a full optimizing compiler. We would be interested to explore a combination of our work, to leverage the existing CompCert compiler, and their work, to include other synchronization atomics.
+
+Dodds et al. \cite{Dodds18} developed an automatic checker for compiler optimizations that supports relaxed memory models. Our trace-preservation simulations mirror their denotation-preserving relation. However, they consider observations for all possible contexts while we only consider permission-coherent ones (\autoref{sec:cpmdefs}). In this way we can verify transformations of code that manipulates shared memory that they cannot.\cprotect{\footnote{For example, their tool cannot verify %\Ccode{store (x,l)} $\rightsquigarrow$ \Ccode{store (x,l); store (x,l)} or 
+\Ccode{store (x,l); l := load (x)} $\rightsquigarrow$ \Ccode{l := load (x); store (x,l)}.
+}}
+
+%LLVM \cite{zhao2012}
+
+%LLVM \cite{zhao2013}
+
+%\subsection*{CompCertTSO} 
+CompCertTSO \cite{Vafeiadis13compcertTSO} is a verified
+optimizing C compiler for programs that use atomic memory operations on x86 TSO. These atomics can be used to write high performance lock-free
+algorithms. But their semantics bakes TSO atomics into a fork of CompCert 1.5. We see no path forward for extending it to more relaxed memory architectures such as Power. In addition, it's a substantial modification to standard CompCert\footnote{The paper
+  \cite{Vafeiadis13compcertTSO} reports 86K lines of Coq,
+  compared with 55K lines for the base CompCert 1.5
+  sequential-language compiler.  The paper does not report how many
+  lines were left unchanged; supposing it were 40K, then the ratio of
+  new-or-modified lines (46K) to old lines (55K) would be over 80\%.}
+that is incompatible with the CompCert's correctness proof for
+sequential programs and thus impractical for the CompCert team to
+adopt. Our approach generalizes to many architectures, and is much
+more compatible with standard CompCert.
+
+\subsection*{Certified concurrent abstraction layers} CCAL \cite{gu18:ccal} is a toolkit to support concurrency in the Certified Abstraction Layers framework \cite{Ronghui15abstractionlayers}. The approach is general purpose but the design is driven for verification of small operating system kernels and thus has some limitations, as explained below.  
+
+\paragraph{CPUs and threads.} CCAL makes an explicit distinction between threads in the same CPU and threads in different CPUs, potentially supporting optimizations that exploit these facts. We consider that a commendable achievement. However, we consider that such distinctions are only useful in system design, where the ``user" wants to have tight control over the contents of cache. General software programmers shouldn't need to worry about what threads are sharing a CPU and, in reasoning about the correctness of concurrent programs, it can be appropriate to abstract this. Our system abstracts all threads in such a way that it doesn't matter on what CPU they are running.   
+
+%\paragraph{Termination. } CCAL preserves termination. Our framework is not currently set to prove termination or the preservation of termination. We are interesting in exploring this in the future. 
+
+\paragraph{Shared memory.} In CCAL, shared memory concurrency can only be achieved through external function calls. That is, reading or modifying shared memory can only be done through \emph{shared primitive calls} which are specified in Coq and represent the behavior of some external modules that handle shared memory access. In that way, different threads in CCAL can interact with ``shared memory", through function calls, but one cannot write code that directly manipulates shared memory. Our Concurrent Permission Machine also uses primitive functions to represent synchronization operations, but on only those functions that would normally be part of a concurrency library (such as \Ccode{pthread_mutex_lock} or \Ccode{pthread_mutex_unlock} in pthreads). Between the primitive calls to acquire and release, our programs are allowed to manipulate shared memory freely. 
+ 
+
+\paragraph{Sharing stack-allocated variables.} The Certified Abstraction Layers framework does not support creating pointers to stack-allocated variables. In particular, threads cannot share stack-allocated variables. We don't impose such a restriction.
+
+\subsection*{CASCompCert}
+
+Jiang et al. \cite{jiang14:pldi} have presented a framework for reasoning about compilers supporting concurrency. The authors apply their framework in CASCompCert, another extension of CompCert that supports race-free concurrent Clight programs. We find it encouraging that we have independently developed several concepts that closely resemble those in CASCompComp. However the two systems differ in significant ways:
+
+\paragraph{Footprints.} One of the main contributions of CASCompCert is to define footprints for every language, showing the locations accessed during execution, and to provide simulations that preserve these footprints. This notion of footprint is closely related to the effects introduced by Stewart et al. \cite{compcomp}, except that footprints also include read accesses to memory. We completely avoid using footprints or effects by leveraging the power of memory permissions, which are already defined in \compcert\ and proven to be preserved by the compiler. In fact, for well defined languages (defined below), the permissions of a thread are a superset of its footprint. As we discuss in \autoref{sec:cpmdefs}, we prefer to reason about permission coherence instead of data race freedom and we can derive DRF preservation from permission-coherence preservation. \todo{Discuss further how to say this less confrontationally}
+
+%The footprints in CASCompCert contain a readable set and a writable set, but contains no notion of locations that can be pointer-compared. This prevents one thread from comparing pointers, while another thread is writing to one of those locations. We support that case with \emph{None empty} permissions. A more fine grained version of the footprint will probably look more like our permission model.   
+
+\paragraph{Sharing stack-allocated variables.} The Coq development of CASCompCert does not support cross-module escape of pointers to stack-allocated
+variables. The authors describe how they would support it, which largely follows the approach of CompComp \cite{compcomp}---that is, using heavyweight structured injections. Our framework supports cross-thread/cross-module escape of pointers to stack-allocated data structures, without the need of structured simulations or extra infrastructure. 
+
+\paragraph{Well defined languages.} CASCompCert requires that languages are \emph{well defined}, which means their execution respects the memory footprint;  in other words, the program only reads locations in the readable set and modifies locations in the writable set. We independently developed a similar notion which we call, more explicitly, \emph{memory semantics}. Thankfully, because of our COAT technique, we only require that the source and target languages (Clight and assembly) are a \emph{memory semantics}. This simplification has two benefits: first, it simplifies the proofs required of the intermediate languages and, second, it allows intermediate languages that are not memory semantics/well defined (as long as the compiler eventually removes all behavior that does not respect the memory interface). 
+
+\paragraph{Memory model.} The \compcert\ memory model assumes that consecutive allocations along an execution produce consecutive blocks of memory. The CASCompCert framework cannot support this allocation model, since changing allocations in one thread will change the execution of other threads. The authors provide a new memory model  and present a bijection between the two models to reuse some of the the existing proofs in \compcert. Our COAT technique ensures that a compiler can reason about a thread as if the context (i.e. other threads) is not changing. In this way we have no problem with the allocation order of \compcert\ and we can use the existing memory model. 
+
+\paragraph{Synchronization primitives.} Just like CASCompCert, we support benign races, such as lock acquire and lock release, as external modules that threads, written in the sequential languages, can call as functions. We go further to support synchronization primitives to create new threads (i.e., \Ccode{pthread_create}), and to convert regular memory locations into semaphores and back (i.e. \Ccode{pthread_mutex_init} and \Ccode{pthread_mutex_destroy}).
+
+%In the reordering proof, Nick Giannarakis proves that changing the order in which threads allocate memory will reorder memory but preserve the programs' behavior. Fortunately, thanks to the structure of our proof, the compiler doesn't have to worry about this reorderings.
+
+\paragraph{Reasoning about correctness.} The design of our Concurrent Permission Machine is driven by its connection to a practical separation logic that can prove programs correct and permission coherent in our semantics. In contrast, the semantic model of CASCompCert is very reasonable but not known to be practical for verification of programs. 
+
+\paragraph{Weak cache consistency.} Another motivation for our design is to connect, at the assembly level, to a reduction theorem (\autoref{thm:owens2} and \autoref{thm:sync-clean}). That is, a proof that a correct program in our assembly semantics (which is, by definition, permission coherent) will run correctly in a machine with weak cache consistency, such as TSO. The CASCompCert compiler presents a notion of data race freedom and safety for assembly programs, but no real connection to realistic memory model.//
+
+\paragraph{Modifications to CompCert.} CASCompCert, together with the modifications necessary to support stack-allocated variables, are just as heavyweight as CompCompCert, and therefore are impractical. We have produced a practical way of doing concurrent compiler correctness, with little modification to CompCert.

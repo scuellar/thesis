@@ -2,6 +2,11 @@
 %% the macros.tex file. Since that file was copied from other projects and I don't want to pollute it.
 %% I might want to merge the two in the future, but for now this separation works.
 
+
+%Hyphens and shortwords:
+%Hyphenation
+\hyphenation{Cshm-gen}
+\hyphenation{Comp-Cert}
 \newcommand{\compcert}{CompCert}
 
 
@@ -11,5 +16,24 @@
 }
 
 %%shorthand
-\newcommand{\main}{\Ccode{main} }
+\newcommand{\main}{\Ccode{main}}
 \newcommand{\maincall}{\Ccode{main() }}
+\newcommand{\nat}{\mathds{N}}
+\newcommand{\CPM}{\text{CPM}}
+\newcommand{\HM}{\text{HM}}
+\newcommand{\HL}{\mathcal{HL}}
+%\newcommand{\L}{\mathcal{L}}
+
+%make math text: 
+\newcommand{\matht}[1]{$\text{#1}$}
+
+%Injections
+\newcommand{\injarrow}[1]{\overset{#1}{\hookrightarrow}}
+
+% strong injections (double head hook)
+\newcommand{\hookdoubleheadrightarrow}{%
+  \hookrightarrow\mathrel{\mspace{-15mu}}\rightarrow
+}
+\newcommand{\strinjarrow}[1]{\overset{#1}{\hookdoubleheadrightarrow}}
+
+

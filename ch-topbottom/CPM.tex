@@ -1,4 +1,694 @@
 \section{The concurrent permission machine}
 \label{sec:topbottom:cpm}
 
-Describe CPM.
+The Concurrent Permission Machine is a language-agnostic operational semantics for concurrent programs.
+We use the CPM as our interface, at the C source level, between
+\emph{proofs of source program properties} and
+\emph{the operational semantics of the programming language};
+we use it as the operational model that allows \emph{modular reasoning about compiler proofs}; and
+we use it as our interface, at the x86 assembly language level,
+between \emph{permission safety} (derived from those proofs)
+and the \emph{well-synchronized} property.
+
+\subsection{Overview}
+The main idea of a Concurrent Permission Machine is a simple one: annotate the small-step operational semantics--of C, of assembly language, or of any intermediate language--with per-thread permissions at every address. A thread is \emph{stuck} if it tries to read address $a$ without read permission, or write without write permission. No two threads ever have conflicting permissions to the same address, so races are impossible. Acquiring a lock \emph{increases} the thread's permissions at some set of addresses; releasing a lock \emph{decreases} permissions. Which permissions are increased or decreased? Intuitively, the semaphore controls access to some shared data; it is those addresses. Of course, these permissions have no physical manifestation in the execution of a machine-language program, so we prove an erasure theorem. But we must wait until the very bottom level (of our proof) before erasing them, so as to be able to prove the kind of race freedom necessary on a weak-cache-consistent multicore processor.
+
+We model a concurrent program as a list of threads,
+each with a local-variable (or register-bank) state,
+each with a permission-map (partial function from address
+to read/write permission), all sharing a single memory.
+The program is equipped with a \emph{schedule}
+determining the order of thread execution.
+
+To enable instantiations to C and assembly (or other
+languages), CPMs are built parametrically on top of \emph{interaction
+  semantics}~\cite{bsda:esop2014},
+   a common abstraction for languages
+operating over shared CompCert memories, each with its own code
+representation, thread-local state, and operational relation for
+internal steps (To support our proofs, we further developed Beringer et al.'s interaction semantics into MOIST semantics; see \cref{ch:compcert}). For $\mathrm{CompCert's}$ languages (i.e., C and Asm),
+we use
+\( \Psi \vdash_\mathrm{CompCert} \left<\sigma,m \right>
+\stackrel{\epsilon}\mapsto \left<\sigma',m'\right> \)
+to refer to this small-step relation, where $\Psi$ is the program, 
+$\sigma$ and $\sigma'$ are thread-local states (a
+thread-local variable store in case of C, a register bank in case of
+assembly), $m, m'$ are CompCert memories, and $\epsilon$ is a
+(possibly empty) trace of events that denote the nonatomic memory
+accesses performed. We use it to state theorems about the absence
+of races between nonatomic accesses. Thread-local execution proceeds
+ad infinitum, reaches a \emph{Halted} state, or reaches an
+external function call. In the latter case---marked
+$\mathrm{at\_external}$---the CPM takes control, for example by
+executing a concurrency primitive (see below), and scheduling other
+threads. Internal execution is resumed by the primitive
+$\mathrm{after\_external}$, decorated by the (optional) return value.
+
+The CPM supports external function calls for
+dynamic creation of threads and locks; thus we have a subset of
+C11 concurrency.  A program can make these external
+function calls:
+
+\begin{lstlisting}[language=C]
+struct lock;
+void spawn (void *func, void *arg); /* spawn a thread */
+void makelock(struct lock *p);  /* initialize a lock */
+void freelock(struct lock *p);  /* decommission a lock */
+void acquire (struct lock *p);  /* acquire a lock */
+void release (struct lock *p);  /* release a lock */
+\end{lstlisting}
+% void exit (int);                /* thread exit */
+
+To specify the gain or loss in access rights that a thread experiences
+when making such external calls, CompCert and CPMs mark locations
+with \emph{permissions}---instrumentation values that may take (in
+increasing order of permissiveness) levels None $<$ Nonempty $<$
+Readable $<$ Writable $<$ Freeable \cite{leroy14:mem}. In
+fact, CompCert's memory model associates permissions to
+each location that indicate
+the running thread's current access rights. 
+A thread's small-step relation is \emph{stuck} whenever a
+memory operation (such as load, store, free) is not supported by the
+thread's permission at the location in question.
+Thread-local execution does not alter existing permissions, with the
+exception of lowering it to
+$\mathrm{None}$ during stack frame
+deallocation. In contrast, external calls (and specifically, the
+concurrency primitives) may modify the permissions arbitrarily
+(though not greater than the max permissions). The CPM
+regulates permission transfers between different threads, maintaining
+\emph{permission coherence} (in particular: the
+absence of conflicting write permissions by different threads), but also
+preserving safety of individual threads as these are compiled.
+
+\paragraph{Example.} Before moving on to the precise 
+definitions of the CPM, let's attempt a first approximation of how the rule for
+\Ccode{Release} should work. We review this example in the next section 
+and the correct rule is shown in \cref{fig:dry-concurrent}.
+
+The multithreaded CPM is guided by a \emph{schedule} $\mho$; we write $i \cdot \mho$ for a schedule in which the $i$th thread is next to execute.  If there are (so far) $k$ spawned threads, the machine maintains a list $\vec{s}$ of $k$ thread-states (local-variable sets) and a list $\vec{\pi}$ of $k$ permission-maps; all threads share the memory $m$.
+To release a lock $a$, the current thread $i$ must be \Coqcode{at_external}, 
+ready to call \Ccode{Release} with argument $a$. The machine must make sure 
+that the lock is currently locked ($m(a)=0$) and unlock it ($m[a \mapsto 1]= m'$).
+\infrule[simplified release]{
+ \mathrm{at\_external}~s_i=\mathrm{Some}(\mathrm{Release},a) \\
+  m(a) = 0 \andalso m[a \mapsto 1]= m' \\
+  \mathrm{guess}~\delta \andalso \vec{\pi}[i\mapsto\, \delta / \pi_i]=\vec{\pi}'  
+}
+{\!\Psi \vdash_\mathrm{CPM} \!\!
+\left<i\cdot\mho, (\vec{s}, \vec{\pi}), m \right>
+\mapsto
+\left<\mho, (\vec{s}', \vec{\pi}'), m'\right>\!\!
+  }
+What permissions should the release transfer? Suppose $a$ 
+controls access to the
+linked list rooted at address $p$. \Ccode{Release} should give 
+up all permissions to that linked list---they are transferred to the lock.
+Unfortunately, different linked lists can be stored at $p$, so the data 
+protected by $a$  can be different every time the lock is released.
+In concurrent separation logic, we describe this with a resource
+invariant $R$; in any given memory, only one set of
+addresses\footnote{In general we do not require \emph{precise}
+  resource invariants, but the linked-list predicate happens to be
+  precise.} can satisfy $R$; this determines which addresses to
+transfer. In the top-to-bottom proof an oracle is constructed from the CSL proof.
+In the CPM the data is given by the oracle as a $\mathrm{guess}~\delta$. The CPM 
+updates the permissions of the current thread, to contain the old permissions
+updated with the permissions transfered $\delta / \pi_i$.
+
+
+
+\subsection{Formal definition of the CPM}\label{sec:cpmdefs}
+
+
+\begin{figure}
+  
+\vspace{-1ex}
+\infrule[acquire]{
+ s_i=\mathrm{Blocked}(\sigma) \!\!\!\!\andalso
+  \mathrm{at\_external}\,\sigma\!=\!\mathrm{Some}(\mathrm{Acquire},\!a) \!\!\andalso
+  \setcur{m}{\pi^2_i}(a)=1 \\ m[a\mapsto 0]=m' \andalso
+  \mathrm{guess}~\delta \andalso 
+  \delta / \pi_i = \pi' \andalso
+  \pi_i \oplus L(a) = \pi'\\
+  \vec{s}[i\mapsto \mathrm{Resume}(0,\sigma)]=\vec{s}' \andalso
+  \vec{\pi}[i\mapsto \pi']=\vec{\pi}' \\
+  \lockpool[a\mapsto \mathrm{Some}\ \emptyset]=\lockpool'
+}{
+\Psi \vdash_\mathrm{CPM} 
+\left<i\cdot\mho, (\vec{s}, \vec{\pi}, \lockpool), m \right>
+\!\!\stackrel{\mathrm{Acq}_i a\, \delta}\mapsto\!\!
+\left<\mho, (\vec{s}', \vec{\pi}', \lockpool'), m'\right>\!\!
+  }
+
+\vspace{-1ex}
+\infrule[acqfail]{
+ s_i=\mathrm{Blocked}(\sigma) \!\!\!\!\andalso
+  \mathrm{at\_external}\,\sigma=\mathrm{Some}(\mathrm{Acquire},a) \andalso
+  \setcur{m}{\plock{\pi_i}}(a)=0
+}{
+\Psi \vdash_\mathrm{CPM} 
+\left<i\cdot\mho, (\vec{s}, \vec{\pi}, \lockpool), m \right>
+\stackrel{\mathrm{AcF}_i a}\mapsto
+\left<\mho, (\vec{s}, \vec{\pi}, \lockpool), m \right>\!\!
+  }
+
+\vspace{-1ex}
+\infrule[release]{
+ s_i=\mathrm{Blocked}(\sigma) \andalso
+  \mathrm{at\_external}~\sigma=\mathrm{Some}(\mathrm{Release},a) \!\!\andalso
+  \setcur{m}{\pi^2_i}(a)\!=\!0 \!\!\!\!\! \\ m[a\!\mapsto\! 1]\!=\!m' \andalso
+  \vec{s}[i\!\mapsto \!\! \mathrm{Resume}(0,\sigma)]\!=\!\vec{s}' \!\!\! \andalso
+  \lockpool(a)=\emptyset \\
+  \mathrm{guess}~\delta \andalso  \mathrm{guess}~\delta_\mathrm{L} \andalso
+  \delta_\mathrm{L}/\emptyset \oplus \delta/\pi_i = \pi_i \\
+  \vec{\pi}[i\mapsto\, \delta / \pi_i]=\vec{\pi}'  \andalso
+  \lockpool[a\mapsto \mathrm{Some} (\delta_\mathrm{L}/\emptyset)]=\lockpool'
+}
+{\!\Psi \vdash_\mathrm{CPM} \!\!
+\left<i\cdot\mho, (\vec{s}, \vec{\pi}, \lockpool), m \right>
+\!\!\stackrel{\mathrm{Rel}_i a\,\delta\,\delta_\mathrm{L}}\mapsto\!\!
+\left<\mho, (\vec{s}', \vec{\pi}', \lockpool'), m'\right>\!\!
+  }
+  
+  %%MAKE LOCK
+  \vspace{-1ex}
+\infrule[make lock]{
+ s_i=\mathrm{Blocked}(\sigma) \andalso
+  \mathrm{at\_external}~\sigma=\mathrm{Some}(\mathrm{mkLock},a)\andalso
+  \vec{s}[i\!\mapsto \!\! \mathrm{Resume}(0,\sigma)]\!=\!\vec{s}'  \\ 
+  \pi_i [a \mapsto (\mathrm{Nonempty}, \mathrm{Writable})] = \pi_i' \!\!\!  \andalso
+  \vec{\pi}[i\mapsto\, \pi_i']=\vec{\pi}'  \\
+  \lockpool(a)=\emptyset \andalso \lockpool[a\mapsto \mathrm{Some} \ \mathrm{None}]=\lockpool' 
+   \!\!\andalso \setcur{m}{\pi^2_i}[a \mapsto 0] \!=\! m' \!\!\!\!\!
+}
+{\!\Psi \vdash_\mathrm{CPM} \!\!
+\left<i\cdot\mho, (\vec{s}, \vec{\pi}, \lockpool), m \right>
+\!\!\mapsto\!\!
+\left<\mho, (\vec{s}', \vec{\pi}', \lockpool'), m'\right>\!\!
+  }
+
+  %%FREE LOCK
+  \vspace{-1ex}
+\infrule[free lock]{
+ s_i=\mathrm{Blocked}(\sigma) \andalso
+  \mathrm{at\_external}~\sigma=\mathrm{Some}(\mathrm{freeLock},a)\andalso
+  \vec{s}[i\!\mapsto \!\! \mathrm{Resume}(0,\sigma)]\!=\!\vec{s}'  \\ 
+  \mathrm{guess}~p \andalso
+  \pi_i [a \mapsto (p, \mathrm{None})] = \pi_i' \!\!\!  \andalso
+  \vec{\pi}[i\mapsto\, \pi_i']=\vec{\pi}'  \\
+  \lockpool(a)=\mathrm{Some} \ \mathrm{None} \andalso \lockpool[a\mapsto \mathrm{None}]=\lockpool'
+}
+{\!\Psi \vdash_\mathrm{CPM} \!\!
+\left<i\cdot\mho, (\vec{s}, \vec{\pi}, \lockpool), m \right>
+\!\!\mapsto\!\!
+\left<\mho, (\vec{s}', \vec{\pi}', \lockpool'), m'\right>\!\!
+  }
+
+\vspace{-1ex}
+\infrule[spawn]{
+ s_i\!=\!\mathrm{Blocked}(\sigma) \!\!\!\!\andalso
+  \mathrm{at\_external}\,\sigma=\mathrm{Some}(\mathrm{Spawn}(f\!,\!a)) \andalso
+|\vec{s}| = j \\
+  \vec{s}[i\!\mapsto \!\mathrm{Resume}(0,\sigma),\, j \!\mapsto \!\mathrm{Start}(f\!,\!a)] =\vec{s}' \\
+  \mathrm{guess}~\delta \!\!\!\andalso
+  \mathrm{guess}~\delta' \!\!\!\andalso
+  \delta / \pi = \pi' \\
+% \almostempty{\delta'}\andalso
+ \delta'\oplus \pi'=\pi \andalso
+  \vec{\pi}[i\mapsto \pi',\,j \mapsto  \delta'/ \{\}] = \vec{\pi}'
+  }
+{\Psi \vdash_\mathrm{CPM} 
+\left<i\cdot\mho, (\vec{s}, \vec{\pi}, \lockpool), m \right>
+\!\!\stackrel{\mathrm{Spa}_{ij}}\mapsto\!\!
+\left<\mho, (\vec{s}', \vec{\pi}', \lockpool), m \right>\!\!
+  }
+
+\vspace{-1ex}
+\caption{Concurrent Permission Machine, synchronization steps.}
+\label{fig:dry-concurrent-sync}
+\end{figure}
+
+%%% OTHER Steps
+\begin{figure}
+\infrule[start]{
+  s_i\!=\!\mathrm{Start}(f\!,\!a) \!\!\!\andalso
+ \vec{s}'\!=\!\vec{s}[i\!\mapsto \!\mathrm{Run}(\mathrm{initialCore}(f,a))]
+}
+  {
+\Psi \vdash_\mathrm{CPM} 
+\left<i\cdot\mho, (\vec{s}, \vec{\pi}, \lockpool), m \right>
+\stackrel{~}\mapsto
+\left<i\cdot\mho, (\vec{s}', \vec{\pi}, \lockpool), m\right>
+  }
+\vspace{-1ex}
+
+\infrule[resume]{
+  s_i=\mathrm{Resume}(v,\sigma) \andalso
+  \mathrm{afterExternal}(\sigma,v)=\sigma' \andalso
+ \vec{s}'=\vec{s}[i\mapsto\mathrm{Run}(\sigma')]
+}
+  {
+\Psi \vdash_\mathrm{CPM} 
+\left<i\cdot\mho, (\vec{s}, \vec{\pi}, \lockpool), m \right>
+\stackrel{~}\mapsto
+\left<i\cdot\mho, (\vec{s}', \vec{\pi}, \lockpool), m\right>
+  }
+\vspace{-1ex}
+
+\infrule[core]{
+ s_i=\mathrm{Run}(\sigma) \!\!\!\andalso
+  \Psi  \vdash_\mathrm{CompCert}
+  \left<\sigma,\setcur{m}{\pi^1_i}\right> \stackrel{\epsilon}\mapsto \left<\sigma',m'\right>\\
+%  \pi'^1=\mathrm{Cur}(m') \andalso  \pi'^2=\pi^2_i\\
+  \vec{s}'=\vec{s}[i\mapsto \mathrm{Run}(\sigma')] \andalso
+  \vec{\pi}'=\vec{\pi}[i \mapsto (\mathrm{Cur}(m'),\pi^2_i)]
+}
+  {
+\Psi \vdash_\mathrm{CPM} \!\!
+\left<i\cdot\mho, (\vec{s}, \vec{\pi}, \lockpool), m \right>
+\stackrel{\epsilon_i}\mapsto
+\left<i\cdot\mho, (\vec{s}', \vec{\pi}', \lockpool), m'\right>\!\!
+  }
+
+\vspace{-1ex}
+\infrule[suspend]{
+ s_i=\mathrm{Run}(\sigma) \andalso
+ \mathrm{at\_external}~\sigma=\mathrm{Some}(f,\vec{x}) \andalso
+  \vec{s}'=\vec{s}[i\mapsto \mathrm{Blocked}(\sigma)]}
+  {
+\Psi \vdash_\mathrm{CPM} 
+\left<i\cdot\mho, (\vec{s}, \vec{\pi}, \lockpool), m \right>
+\stackrel{~}\mapsto
+\left<\mho, (\vec{s}', \vec{\pi}, \lockpool), m \right>
+  }
+
+ \vspace{-1ex}
+ \infrule[stutter]{
+   (s_i=\mathrm{Blocked}(\sigma)\wedge
+  \mathrm{at\_external}~\sigma=\mathrm{Some}(\mathrm{Exit},\_)
+ %  \mathrm{halted}~\sigma
+ )
+  ~\vee~ \neg(0 \le i < |\vec{s}|)
+ }  {
+ \Psi \vdash_\mathrm{CPM} 
+ \left<i\cdot\mho, (\vec{s}, \vec{\pi}, \lockpool), m \right>
+ \stackrel{~}\mapsto
+ \left<\mho, (\vec{s}, \vec{\pi}, \lockpool), m \right>
+ }
+
+\vspace{-4ex}
+\infrule[done]{
+\\
+\\}
+{\Psi \vdash_\mathrm{CPM} 
+\left<\mathrm{nil}, (\vec{s}, \vec{\pi}, \lockpool), m \right>
+\stackrel{~}\mapsto
+\left<\mathrm{nil}, (\vec{s}, \vec{\pi}, \lockpool), m \right>
+  }
+\vspace{-1ex}
+\caption{Concurrent Permission Machine: administrative and internal steps.}
+\label{fig:dry-concurrent}
+\end{figure}
+
+The CPM operates over states of the form
+$\left<\mho, (\vec{s}, \vec{\pi}, L), m \right>$, where
+\begin{itemize}
+\item[$\mho$] is a (cooperative) schedule,
+a finite sequence of natural numbers indicating
+which thread to run next.
+We approximate infinite computations by
+quantifying over all finite prefixes.
+\item[$\vec{s}$] is a list of marked local states of the CompCert
+  language the CPM is instantiated by; $s_i \in
+  \{\mathrm{Start}(f,a),\mathrm{Run}(\sigma_i),
+  \mathrm{Blocked}(\sigma_i),\mathrm{Resume}(v_i,\sigma_i)\}$, where
+  $\sigma_i$ is the $i$th thread's local state.  
+  $\mathrm{Start}(f,a)$
+  denotes that the thread should start by calling function $f$ with
+  arguments $a$; 
+  $\mathrm{Run}(\sigma_i)$
+  denotes that the thread is in the middle of sequential execution; 
+  $\mathrm{Blocked}(\sigma_i)$
+  denotes that the thread has called a synchronization primitive, and is waiting for the CPM to execute it; 
+  $\mathrm{Resume}(v,\sigma_i)$ means that an external
+  call has returned value $v$ to be fed back to the thread.  A halted thread (one that has returned from its initially spawned function) 
+  is recognized by a \emph{halted} predicate.
+  
+  
+\item[$\vec{\pi}$] is a list of permission map pairs, one pair
+  for each thread (the components of these pairs are described below).
+\item[$L$] is a function from address to option(option(permission)),
+  indicating the state of each lock: $L(a)=\,$None means that $a$ is
+  not a lock. Some(None) means that $a$ is locked---permissions
+  associated with the lock $a$ are hence installed in the $\emph{Cur}$
+  component of $m$.  Some(Some~$\pi$) means $a$ is unlocked and
+  $\pi$ is the permission that a thread would obtain by acquiring
+  $a$.
+\item[$m$] is the global memory, shared by all threads.
+\end{itemize}
+
+The CPM employs judgments $ \Psi \vdash_\mathrm{CPM}
+\left<\mho, (\vec{s}, \vec{\pi}, \lockpool), m \right>
+\stackrel{\epsilon}\mapsto \left<\mho', (\vec{s}', \vec{\pi}',
+  \lockpool'), m' \right> $, as shown in \cref{fig:dry-concurrent-sync} and \cref{fig:dry-concurrent}.
+
+Without $\vec{\pi}$ and $\lockpool$, it would be a rather
+conventional model of a cooperative-concurrent machine, with threads
+$\vec{s}$ operating on a memory $m$.  The type of thread-states $s$
+ contains local variables and control-stack.  
+ The initial state has a single thread (at the beginning of
+the \textsf{main} function) and an empty lock pool.
+
+Each thread $s_i$ has its own pair $\pi_i$ of (finite) permission
+maps: for each address $l$, $\pi_i(l)$ contains a \emph{data} permission
+$\pdata{\pi_i}(l)$ and a \emph{lock} permission $\plock{\pi_i}(l)$.
+When scheduled, the thread's data permissions are installed as the
+current permission in CompCert's memory (operation
+$\setcur{m}{\pi^1_i}$ in rule {\sf core}), thus regulating the dynamic
+access to shared locations.\footnote{The installation of permission
+  maps happens at the granularity level of instructions / individual
+  execution steps; this permits the reuse of the CPM framework in the
+  setting of fine-grained interleaving, as described in \cref{sec:fine}. } In
+contrast, the thread's lock permissions are never installed in the
+CompCert memory of a running thread, but employed by the CPM to decide
+whether a thread's lock requests can be granted; in this context,
+Readable permission grants ``permission to acquire/release'' and
+Writable means ``permission to decommission \textsf{(freelock)} the
+lock back into ordinary data''.  In the context of both data and lock
+permissions, Readable can be thought of as ``Shared'' and Writable as
+``Exclusive'': data is read-only when shared and can be written when
+held exclusively, while locks can be acquired and released when shared
+and can only be turned back into data when held exclusively.
+
+The lock pool $\lockpool$ maps each address $a$
+to either None (not a lock),
+Some($\emptyset$) (when the lock is locked) or
+Some($\pi$) (when the lock is unlocked and
+holds a resource whose permission map is $\pi$).
+
+%Generalizing O'Hearn's original development~\cite{ohearn07:tcs} the
+%CSL we describe in \cref{sec:CSLsound} contains resource
+%invariants $R$ to specify the memory regions regulated by locks. 
+As in O'Hearn's original CSL~\cite{ohearn07:tcs}, resource invariants R specify the memory regions (and assertions on them) regulated by locks.  As in Gotsman \emph{et al.}~\cite{gotsman07} and Hobor \emph{et al.} \cite{hobor08:esop}, locks are dynamically creatable at addresses in memory; as in Hobor et al., resources are higher-order in that they may predicate over other locks and their resource invariants, or even over this lock and its resource invariant.  To support higher-order impredicative resource invariants, we use a step-indexed model of CSL, but we want to avoid putting step-indexed resource invariants into the CPM itself.
+To avoid the use of higher-order resource invariants in the CPM, the CPM
+uses guesses $\delta$, \emph{partial permission maps} that specify
+which new permissions should be installed for every address in their
+domain.  We write $\delta/\pi$ to mean a permission map in which
+$\delta$ ``overrides'' $\pi$.  Like $\pi$, each $\delta$ is a pair of
+\emph{data} and \emph{lock} permission, at each address.
+
+To find $\delta$ without knowing $R$ (in particular: concurrency
+operations operating on the same lock may yield different permission
+transfers at different points in the execution, as footprints are
+dynamic), the CPM uses \emph{angelic nondeterminism}.  A program is
+safe if there exists any sequence of angelic guesses $\delta$ such
+that the program does not get stuck.
+\Cref{sec:CSLsound} describes how we prove that
+this sequence of guesses must exist: in particular, any CSL proof
+entails a sequence of guesses for which the CPM is nonstuck.
+
+In two nonstuck executions of $\vdash_\mathrm{CPM}$ from the same
+start \linebreak[3] state but with different guesses $\delta$, the
+values loaded and stored (and passed as parameters to functions) are
+the same.  Guesses $\delta$ affect only the permissions of the memory.
+Insufficient permission can cause a stuck state, but extra permissions
+do not change values loaded or stored.  Therefore the angelic
+nondeterminism does not affect any observable property of a nonstuck
+execution.
+
+The operator $\setcur{m}{\pdata{\pi}_i}$ sets the current
+permissions of $m$ to the \emph{data} permission-map of the $i$th thread;
+respectively, $\setcur{m}{\plock{\pi}_i}$ sets $m$ to the \emph{lock} permission-map.
+
+We write $\pi\oplus\pi'=\pi''$ to indicate a kind of
+\emph{join} on permission maps; it's a relation, not a function,
+because Readable$\oplus$Readable
+could ``add up'' to 
+Readable or Writable.
+
+The annotation $\epsilon$ is an \emph{event trace}, recording
+nonatomic memory operations, acquires and releases of locks, creation
+and destruction of locks, and creation of threads.  Later, we'll use
+this ordered sequence of operations to define
+\emph{well-synchronized} executions.
+
+\paragraph{Example.} Following up from the example in the previous section, 
+we address the changes in the \textsc{release}, from the simplified version 
+presented before: 
+%we can read the complete \textsc{release} rule as follows:
+%In program $\Psi$, with schedule $i\cdot \mho$,
+%the state with thread-states $\vec{s}$, thread permission-maps $\vec{\pi}$,
+%and lock permission-maps $\lockpool$ steps
+%to the state $\left<\mho, (\vec{s}', \vec{\pi}', \lockpool'), m'\right>$,
+%provided that:
+the $i$th thread's state is $\mathrm{Blocked}(\sigma)$, 
+which signals to the machine that the external function has not been executed;
+%$\sigma$ is the parameters to an external call,
+%in this case describing that the
+%thread is attempting a \textsf{release}
+%operation on lock $a$;
+when loading from $m$ we adjust the current permissions of 
+$m$ to make the lookup permissible according to the threads' lock permissions ($\pi_i^2$);
+%we obtain $m'$ by storing 1 at $a$ (thus unlocking the semaphore);
+the CPM signals that the \textsc{release} has been executed by setting the $i$th thread to
+$\mathrm{Resume}(0,\sigma)$;
+%we guess a permission-delta $\delta$ representing changes
+%to thread $i$'s footprint caused by giving up the locked resource;
+we also have to guess $\delta_\mathrm{L}$ representing
+the new resource held in the pool of unlocked resources;
+we make sure that the new permissions in the lock pool ($\delta_\mathrm{L}/\emptyset$) and in the thread ($\delta/\pi_i$)
+"add up" to the old permissions in the thread ($\pi_i$);
+we require that the guessed $\delta,\delta_\mathrm{L}$ have
+not caused competing permissions;
+%$\pi_i$ must have no more permission (at any address)
+%than $\pi$ modified by $\delta$;
+we modify $\lockpool$ at address $a$
+to hold $\delta_\mathrm{L}/\emptyset$.
+
+One might think that $\delta$ must uniquely determine $\delta_\mathrm{L}$;
+why do we need both?  Remember that $\pi\oplus\pi'=\pi''$ is notation for a relation,
+which is not deterministic (two Readable
+permissions may add up to either a Readable or a Writable permission),
+so we use $\delta,\delta_\mathrm{L}$ to cope with this bit of
+nondeterminism.\\
+\subsubsection{Permission coherence}
+
+We say $  \mathrm{coherent}(\vec{\pi},\lockpool,m )$
+when 
+$\pi_i$ and $\pi_j$ (or $\pi_i$ and $\lockpool(l)$, etc.)
+do not give \emph{competing} permissions at any address,
+nor treat any address as both \emph{data} and \emph{lock}.
+For example, $\pi_i^1(a)=\mathrm{Writable}$
+means thread $i$ can do nonatomic reads/writes to address $a$;
+this is compatible with
+$\pi_j^1(a) \le \mathrm{Nonempty}$ (for $i\not=j$),
+meaning that thread $j$ ``knows that $a$ is allocated,''
+but not with $\pi_j^1(a)=\mathrm{Readable}$,
+nor with $\pi_j^2(a)\not=\mathrm{None}$.
+That is, if thread $i$ sees $a$ as a data
+location, then thread $j$ cannot see the same address as
+a lock. Every execution of the CPM maintains coherence as an invariant.
+
+
+\begin{definition}[Competing permissions]
+  \label{def:comp-perm}
+  Two permissions in the CompCert permission lattice, compete iff:
+  \begin{enumerate}
+  \item one of them is Freeable and the other is Nonempty or higher; or
+  \item one of them is Writable and the other is Readable or higher.
+  \end{enumerate}
+\end{definition}
+Intuitively, Freeable means ``no other thread even knows this data is allocated, so I can free it.''  Nonempty means ``I know this data is allocated, even though I can't read or write it.''  With Nonempty \emph{data} permission one can at least do pointer-equality tests; in C11, these are defined only on
+addresses of allocated data.
+
+
+\begin{definition}[Data-Lock coherent]
+  \label{def:data-lock}
+  Two permissions in the CompCert permission lattice, respect the data-lock
+  invariant iff: The lock permission is not Freeable; and if the lock permission
+  is $\ge$Readable then the data permission $\le$Nonempty.
+\end{definition}
+A Readable \emph{data} permission gives permission to read; a Readable \emph{lock} permission gives permission to (attempt to) acquire the lock.
+To perform \textsf{makelock}, which converts a data block to a lock, one needs at least a \emph{data} permission of Writable; the \textsf{makelock} takes away
+the Writable \emph{data} permission (leaving either None or Nonempty \emph{data} permission) and grants Writable \emph{lock} permission.  In turn, that \emph{lock} permission can be split into several Readable parts, to be granted to various threads that want to contend for the lock.  Eventually, these might be gathered together by a single thread into a Writable \emph{lock} permission,
+which is enough to perform \textsf{freelock}, which converts a
+Writable \emph{lock} permission to a Writable or Freeable \emph{data} permission.
+
+We lift \cref{def:comp-perm} and \cref{def:data-lock} to permission-maps $\pi$.  Recall that we write $\pi^1_i$ for thread $i$'s \emph{data} permission-map, and $\pi^2_i$ for thread $i$'s \emph{lock} permission-map.  We write 
+$L(a)^1$ for the \emph{data} permission-map of the unlocked lock at address $a$,
+and $L(a)^2$ for its \emph{lock} permission-map.  Locked locks have empty permission-maps, since all their permissions have been (temporarily) added to the permission-map of the thread that acquired the lock.
+
+\begin{definition}[Coherent\footnote{The Coq implementation details of this definition can be found in \cref{sec:implementation:cmpformaldesign}}]
+  \label{def:dry-coherent}
+  We say that a state of the $\mathrm{CPM}$ machine is $\mathrm{coherent}$,
+  written as $\mathrm{coherent}(\vec{\pi},\lockpool,m)$ iff:
+  \begin{enumerate}
+  \item For all $i$, $\pi^1_i \leq \mathrm{Max}(m)$ and $\pi^2_i \leq
+    \mathrm{Max}(m)$
+  \item For all $L(a)$, $L(a)^1 \leq \mathrm{Max}(m)$ and $L(a)^2 \leq
+    \mathrm{Max}(m)$
+  \item For all $i,j$, permission-maps  $\pi_i^1$ and $\pi_j^2$ are data-lock
+    coherent; and if $i\not= j$, then $\pi^1_i$ and $\pi^1_j$ do not compete
+    and $\pi^2_i$ and $\pi^2_j$ do not compete.
+  \item For all $L(a)$ and $\pi_i$, $L^1(a)$ and $\pi_i^2$ are data-lock
+    coherent, $\pi^1_i$ and $L^2(a)$ are data-lock coherent, $\pi^1_i$ and
+    $L^1(a)$ do not compete, and $L^2(a)$ and $\pi^2_i$ do not compete.
+  \item For all $a,b$, $L^1(a)$ and $L^2(b)$ are data-lock coherent;
+    and if $a \neq b$ then $L^1(a)$ and $L^1(b)$ do not compete, and $L^2(a)$
+    and $L^2(b)$ do not compete.
+  \end{enumerate}
+\end{definition}
+
+\subsubsection{Safety}
+
+We use two notions of safety. First the intuitive one is as follows 
+\begin{definition}[Weak CPM Safety]
+A CPM state is \emph{safe for k steps}, written 
+$\mathrm{safe'}_{k}$, when
+there exists a sequence of angelic guesses $\delta$
+such that the machine does not get stuck within $k$ steps.
+%A CPM state is \emph{safe} if every execution reaches a halted state or runs forever.
+\end{definition}
+
+Using a schedule $\mho$ is a useful fiction, however oftentimes we like to express that the program safety does not depend on the schedule. It is not enough to quantify Weak CPM Safety over all possible schedules, since we want our safety to be preserved by execution. We need a slightly stronger notion of safety that quantifies over all schedules after every step 
+
+\begin{definition}[CPM Safety]
+A CPM state is \emph{safe for k steps}, written 
+$\mathrm{safe}_{k}$, when
+there exists a sequence of angelic guesses $\delta$
+such that the machine does not get stuck within $k$ steps, 
+even when it's allowed to change the tail of its schedule.
+\end{definition}
+
+Since a safe execution makes the ``right angelic guesses", we can prove the following lemma  
+\begin{lemma}[Safety implies coherence] If a program is safe for all $k$, then every state in the execution is coherent.
+\end{lemma}
+
+
+% \todo{Should we include those hand-written proofs in an appendix, since we already have them? They are a bit more readable than Coq proofs, and we have a lot of them, if you include previous versions of the paper. 
+% The coinductive safety proof looks cool, but it doesn't add any intuition and just drains energy from the reader - also we need space}
+%\begin{theorem}[Coinductive safety]
+%\label{thm:coinductive-safety}
+%If a CPM state is $\mathrm{safe}_{k}$ for all $k$, then it is safe.
+%\end{theorem}
+%\begin{proof}
+%  At every state, there is a finite number
+%  of possible angelic guesses $\delta$.  So the executions of
+%  a program form a tree with finite span.
+%  By Koenig's lemma, if there are arbitrarily long executions,
+%  then there is an infinite execution.
+%\end{proof}
+
+
+% \section{CompCert interaction semantics}
+% \label{sec:interaction}
+
+% The \textsc{Core} rule of the CPM relies on a judgment
+% \(
+%   \Psi  \vdash_\mathrm{CompCert}
+%   \left<\sigma,m \right> \stackrel{\epsilon}\mapsto \left<\sigma',m'\right>
+% \)
+% describing a single \emph{local (not external call)} step of one thread of a C or assembly language
+% program.
+
+% To improve the modularization between CompCert's core languages and
+% a shared-memory context,
+% Beringer \emph{et al.} introduced \emph{Interaction Semantics} \cite{bsda:esop2014}: imagine several ``cores'' (thread-local-variable states) sharing a memory.
+% A program (in C or in any of CompCert's
+% intermediate languages)
+% can execute ``internal steps,'' also called ``core-language steps;''
+% or it can reach an external function call,
+% a state characterized as at\_external.  A core-language small-step
+% semantics has no steps from an at\_external state; being at\_external
+% is a situation for the context to cope with.  The context may
+% eventually put this thread back into an afterExternal state,
+% with an optional return-value to fold back into the local state.
+
+% Each core semantics (C light, assembly, etc.)
+% has a (different) type of \emph{Program} $\Psi$ and 
+% \emph{local state} $\sigma$.
+% C light's $\sigma$ has local variables and control stack;
+% assembly language's $\sigma$ has a register bank.
+% All the core semantics share the same type of memory $m$,
+% the CompCert memory type.  
+
+% CompCert's small-step relation (in
+% any of its ILs) is such that,
+% in a state $\left<\sigma,m\right>$, where the next command in $\sigma$
+% attempts to load or store at address $a$ in $m$,
+% the current permission in $m$ at $a$ must support the operation
+% or else the small-step relation is \emph{stuck}.
+% CompCert keeps track of a 
+% \emph{max permission} at each address (to justify
+% constant-folding of loads from global read-only variables) and a
+% \emph{current} permission (intended though never before proved
+% to enforce coherence of concurrent threads).
+% An external call may increase or decrease
+% \emph{current} permissions (this can simulate gaining/relinquishing
+% access to a data block when aquiring/releasing a lock),
+% but never above the \emph{max}.
+
+% A CompCert thread can access only a subset of its memory
+% (where it has \emph{current permission}).
+% Permissions
+% were added to CompCert \cite{leroy14:mem}
+% to help ensure that one thread does not interfere with
+% other threads.  We call such semantics a \emph{memory-semantics} and define it formally in section \cite{sec:seqcomp} and show how to make use of that feature. 
+
+\subsection{Generality of the CPM}
+\label{sec:general}
+
+The C11 standard defining the behavior of concurrent C programs has the following design principles:
+\begin{itemize}
+\item Memory locations can be classified as either nonatomic (accessed by normal operations in a well-synchronized manner) or atomic (accessed by synchronization operations, not necessarily well-synchronized).
+\item Compilers should optimize nonatomic operations.
+\item Ill-synchronized accesses to nonatomic locations (i.e., data races) lead to undefined behavior.
+\item Between synchronization operations, code in a thread is executed as if it were sequential.
+\item Correctly written code should execute correctly on any processor, regardless of its relaxed memory model.
+\end{itemize}
+The CPM gives an operational semantics for concurrent programs that obeys these principles, making it well suited for modeling lock-based concurrent programs in C and any other language that adheres to the same principles. The \textsc{core} rule of \cref{fig:dry-concurrent} incorporates the sequential semantics of the language into the machine, and the remaining rules give semantics to the atomic operations. Because the CPM uses cooperative scheduling, the behavior of a thread between synchronization operations is exactly its sequential behavior, and compilers can optimize code in between synchronizations as if it were sequential.
+
+In \cref{sec:CSLsound} we show that
+the CPM serves as an operational model for Concurrent Separation Logic.
+But it models permission coherence more generally than just CSL.
+For example, 
+Gu \emph{et al.} describe a refinement method for proving
+correctness of shared-memory concurrent programs~\cite{gu18:ccal}
+with a ``push/pull'' model for releasing and acquiring locks.
+The \emph{push} and \emph{pull} can be modeled as angelic permission
+transfers in the CPM while it is unknown whether they can be modeled in concurrent separation logic.
+
+To demonstrate that our CPM is more general than our specific concurrent separation logic,  
+we show an example of a program that our CPM can model even though our CSL front-end cannot model it.
+The logic presented in \cref{sec:CSLsound}, 
+and many others similar concurrent logics (e.g., \cite{ohearn07:tcs}, \cite{hobor08:esop}), will fail to 
+prove the correctness of the following example: 
+
+\begin{tabular}{l@{\qquad\qquad}l@{\qquad\qquad\qquad}l}
+\emph{(thread 1)} & \emph{(thread 2)} \\
+    p[0]=x;      &  if (?) \\
+    release (A); & then acquire (A); \\
+    release (B); & else acquire (B); \\
+                 & y=p[0]; \\
+\end{tabular}
+
+\
+
+\noindent Some CSLs fail to reason about this example because we don't 
+know whether the resource p[0] is
+transferred through lock $A$ or lock $B$. Some CSLs with ghost state can
+prove the program correct: in fact, as Jung \emph{et
+  al.}~\cite{jung2015iris} have shown, ghost state can be used to
+incorporate general rely-guarantee reasoning into CSL, by creating a
+more general notion of invariant that is not tied to atomic accesses
+to a specific location. In this case, the \texttt{release} and
+\texttt{acquire} rules must be interpreted as a different kind of
+atomic access, one that allows interaction with the global
+invariant. The above example can also be proven correct in a rely-guarantee logics
+such as VCC \cite{cohen09:tphols} or Iris~\cite{jung2015iris}. 
+Regardless of the means used to verify the program, it can
+still be executed in the CPM: for each choice of lock, there exists a CPM execution that performs the appropriate permission transfer.
+
+The current presentation of the CPM is limited to sequentially consistent concurrency; 
+however, we believe that it can be extended to support models such as the promising semantics \cite{Kang2017promising}. To account for the different views of of memory, we can replace permission maps with partial views of memory (with memory content). We leave this for future work.

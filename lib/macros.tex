@@ -1,18 +1,3 @@
-%Copied from our LICS submission (taxonomy)
-
-%%%%%%%%%%%%%%
-%% Separation macros
-\newcommand{\wand}{{-  \mkern-6mu*}}
-\newcommand{\emp}{{\keyw{emp}}}
-
-%Compcertpermissions
-\newcommand{\Free}{{\keyw{Freeable}}}
-\newcommand{\Write}{{\keyw{Writable}}}
-\newcommand{\Read}{{\keyw{Readable}}}
-\newcommand{\Nempty}{{\keyw{Nonempty}}}
-\newcommand{\nonpos}{{\keyw{nonpos}}}
-%\newcommand{\None}{{\mathrm{None}}}
-
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Rustan wants the letters in his math formulas to be spaced
@@ -128,7 +113,7 @@
 }
 
 \newcommand\pair[2]{\left<#1,#2\right>}
-\newcommand{\boxdotright}{\!\mathrel\boxdot\joinrel\rightarrow\!}
+\newcommand{\boxdotrightxx}{\!\mathrel\boxdot\joinrel\rightarrow\!}
 \newcommand{\islock}{\boxdotright}
 \newcommand{\islocksh}[1]{\stackrel{#1}\boxdotright}
 \newcommand{\nxt}[2]{\mathsf{next}\,#1\,#2}
@@ -139,7 +124,7 @@
 \newcommand{\defeq}{\triangleq}
 
 \newcommand{\upd}[3]{#1[#2\mapsto #3]}
-\newcommand{\eval}[6]{#1 \vdash #5 \Downarrow_{#2, #3, #4} #6}
+%\newcommand{\eval}[6]{#1 \vdash #5 \Downarrow_{#2, #3, #4} #6}
 \newcommand{\step}[5]{#1 \vdash #2, #3 \longmapsto #4, #5}
 %%% \estep: #6 is effect set
 \newcommand{\estep}[6]{#1 \vdash #2, #3\ \overset{#6}{\longmapsto} #4, #5}
@@ -237,3 +222,23 @@
 
 
 \newcommand{\later}{\triangleright}
+\newcommand\lockpool{L}
+\newcommand\setcur[2]{#1 |_{#2}}
+\newcommand\decay[3]{#1 \stackrel{#2}{\leadsto} #3}
+
+%%% Concurrent CompCert Macros
+\newcommand\oracle\omega
+\newcommand\OracleIs[1]{\mathrm{Oracle}= #1}
+\newcommand\event[3]{\left< #1, #3, [#2] \right>}
+\newcommand\pdata[1]{#1^1}
+\newcommand\plock[1]{#1^2}
+
+
+%%% COMMENTS
+
+%\RequirePackage{\ifdraft}
+%\newcommand{\todo}[1]{\ifdraft{ {\color{blue} TODO:#1}}\fi}
+%\newcommand{\done}[1]{\ifdraft{{\color{green} DONE:#1}}\fi}
+
+%\newcommand{\todo}[1]{ }
+%\newcommand{\done}[1]{ }

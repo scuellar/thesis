@@ -1,0 +1,20 @@
+
+
+\section{Self simulations}\label{sec:selfsim}
+When one thread is compiling (using a COAT model), what happens to the other threads? Their code is not changing but the context is, and that might change the memory observable by the thread. For example, if a compiling thread allocates less memory (or more), the other threads will see locations in memory change, even their own allocations.\footnote{CompCert's memory model allocates blocks in order, so the block numbers are not preserved by interference of other allocations. However, the memory structure is preserved up to the memory injection.} We must prove that the behavior of threads that don't compile is preserved, under the compilation of other threads. This preservation of behavior can be even stronger than the one preserved by the compiler. For example, we can expect that threads that don't compile allocate the same number of blocks in the same order (even if the block numbers change). We formalize this, strong preservation of behavior under changes to the context as \emph{self simulation}.
+
+\begin{definition}
+We say that a language \matht{L} \emph{simulates itself} if there is an \emph{injection relation} between its states and indexed by a memory injection, such that:
+\begin{itemize}
+\item States related by the injection relation take steps that have equivalent (up to memory injection) effects on memory and preserve the injection relation,
+\item The injection relation preserves \Coqcode{at_external}, and
+\item The injection relation is monotonic on the memory injection.
+\end{itemize}
+
+\end{definition}
+
+We prove in Coq that Clight and Assembly self-simulate.
+
+\begin{lemma}\label{thm:selfsim} Clight and x86 assembly self-simulate. \end{lemma}
+
+Proving self simulation for source and target languages is a necessary step of the COAT technique. However, we only need to prove it twice (for source and target languages)---that is, we don't need to prove it for each intermediate language of CompCert. On the other hand, the COAT technique simplifies the simulation relations that we need to require from every pass of the compiler\footnote{When only one thread is compiling, we model other threads as the standard external calls that CompCert supports; thus, we don't need the complicated \Coqcode{at_external} and \Coqcode{after_external} of \cite{compcomp}. We also simplify the simulation of initial states as explained in \cref{sec:compcert-sim}.}, of which there are more than 16. In general this makes the proof effort easier, and much easier to extend. This precisely why we find the COAT technique so powerful.

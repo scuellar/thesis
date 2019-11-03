@@ -1,1 +1,24 @@
-Conclusion text.
+
+This thesis presents a powerful semantics for concurrent programs, the Concurrent Permission Machine, that enables a top-to-bottom proof of correctness, 
+from the soundness of the Concurrent Separation Logic, through a proven correct optimizing compiler, to an assembly program that runs correctly in a realistic model of a machine with weakly consistent cashes; all of this is done with machine checked proofs in Coq. The CPM uses the notions of permission, already existing in CompCert, and the simple notion of \emph{coherence} that has the same guarantees of data-race freedom, but allows local reasoning.  
+
+We present the proof of correctness of a real optimizing compiler that supports programs with concurrency. The proof leverages an existing proof of correctness that only supports sequential programs and, with minimal changes, derives a proof that supports concurrency. We compose this compiler correctness proof with the soundness of the CSL, the interleaving proof and the synchronization proof, to produce a top-to-bottom proof of correctness; the proof ensures the correct execution of a compiled program, whose source has been proven correct, in a machine like x86. 
+
+%
+%C programs should be well synchronized.  We have defined
+%a simple and stronger notion, \emph{permission coherence}.
+%We have formalized this as a \emph{Concurrent Permission Machine},
+%and we argue that any reasonable C program should (under
+%any schedule) execute without getting stuck in the CPM.
+%We have argued that this allows reasoning about compiler correctness
+%in a more single-threaded framework: the compilation of each
+%thread individually should respect the permissions.
+%%We have formally specified this simulation property
+%%as \lstinline{fsim_properties_inj}, a strengthening
+%%of CompCert's existing simulation relation; and we have proved
+%%that CompCert 3.2 respects this stronger correctness property.
+%We have proved that any C program provable in Concurrent
+%Separation Logic is reasonable (safe in CPM),
+%and that any (C or assembly) program safe in CPM is well synchronized.
+%This implies
+%correct execution on a multiprocessor with weakly consistent memory.

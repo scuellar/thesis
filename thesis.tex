@@ -34,7 +34,10 @@
 %%%%%%%%%%%%%%%%%%%%%
 %%%%%  DEFAULT  %%%%%
 %%%%%%%%%%%%%%%%%%%%%
-\providecommand{\chooselayout}{\documentclass[12pt,lot,lof,twoside]{lib/puthesis}}
+\providecommand{\chooselayout}{\documentclass[12pt, lot,lof%,twoside
+]{lib/puthesis}}
+\PassOptionsToPackage{final}{hyperref}
+\setlength{\marginparwidth}{2cm}
 \providecommand{\modifyoutput}{}
 \providecommand{\fixupmargins}{\usepackage[hmarginratio=2:1]{geometry}}
 
@@ -116,9 +119,13 @@ with shared memory concurrency. }
 %Verticall align tabular
 \usepackage{array}
 
+%Nicer footnotes
+\usepackage{cprotect} %replace \footnote with \cprotect\footnote
+%\usepackage{bigfoot}
 
 %%% for comments
 \usepackage{verbatim}
+
 
 %%% For tables
 \usepackage{multirow}
@@ -126,6 +133,10 @@ with shared memory concurrency. }
 \usepackage{longtable}
 %multicol allows multiple columns (we use this in tables)
 \usepackage{multicol}
+
+%For aligning enumerations and labels
+\usepackage{calc}
+\usepackage[shortlabels]{enumitem}  
 
 % Booktabs produces far nicer tables than the standard LaTeX tables.
 %   see: http://en.wikibooks.org/wiki/LaTeX/Tables
@@ -149,17 +160,33 @@ with shared memory concurrency. }
 % default caption width is 4in for longtable, but wider for normal tables
 \setlength{\LTcapwidth}{\textwidth}
 
-%Personal and group macros:
-\input{lib/macros}
-\input{lib/moremacros}
-\input{lib/theorem-envs}
 
 %Math letters like |P
 \usepackage{ dsfont }
+\usepackage{amsfonts} 
 %Math stuff
-\usepackage{ amsmath,}
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{aliascnt}
+%for semantics [| and |]
+\usepackage{stmaryrd}
 % To add nice arrows for diagrams
 \usepackage{tikz-cd}
+% arranging formulas:
+\usepackage{mathpartir} 
+\usepackage{semantic}
+%To make inference rules
+\usepackage{lib/infrule}
+
+%Has to go after amsmath
+\ifdefined\boxdotright
+\else
+\usepackage{newtxmath} % Need this on Santiago's computer to get \boxdotright
+\fi
+
+%%For TODO's (HAS TO GO AFTER HYPERREF to get links working on drafts)
+\usepackage[obeyDraft]{todonotes}
+\usepackage{ifdraft}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% Printed vs. online formatting
@@ -176,8 +203,12 @@ with shared memory concurrency. }
 %ProQuest copy -- http://www.princeton.edu/~mudd/thesis/Submissionguide.pdf
 
 % ProQuest requires a double spaced version (set previously). They will take an electronic copy, so we want links in the pdf, but also copies may be printed or made into microfilm in black and white, so we want outlined links instead of colored links.
-\usepackage{hyperref}
+\usepackage[draft=false,final]{hyperref}
+\hypersetup{final}
+\PassOptionsToPackage{final}{hyperref}
 \hypersetup{bookmarksnumbered}
+
+
 
 % copy the already-set title and author to use in the pdf properties
 \makeatletter
@@ -209,6 +240,17 @@ with shared memory concurrency. }
 \fi % proquest or online formatting
 \fi % printed or online formatting
 
+
+%Clever references, better than autoref, prints lemma instead of theorem (even thout they share counter)
+%HAS TO BE LOADED AFTER HYPERREF
+\usepackage[nameinlink]{cleveref} 
+\usepackage[shortlabels]{enumitem}
+
+
+%Personal and group macros:
+\input{lib/macros}
+\input{lib/moremacros}
+\input{lib/theorem-envs}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\
 %%%% Define commands
@@ -282,13 +324,21 @@ with shared memory concurrency. }
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\
 %%%% Hide some chapters
 
+\usepackage{lib/excludeonly/excludeonly}
 %%% If you want to produce a pdf that includes only certain chapters, specify them with includeonly, in addition to including all chapters below.
 %\includeonly{ch-intro/chapter-intro}
 %%% You can also specify multiple chapters.
 %\includeonly{ch-intro/chapter-intro,ch-usage/chapter-usage}
 %\includeonly{chap1,chap2,chap3}
-
-
+%\includeonly{ch-compcert/chapter-compcert}
+%\includeonly{ch-pastwork/chapter-pastwork}
+%\includeonly{ch-topbottom/chapter-topbottom}
+%\includeonly{ch-compiler/chapter-compiler,ch-conclusion/chapter-conclusion}
+%\includeonly{ch-intro/chapter-intro, ch-pastwork/chapter-pastwork, ch-topbottom/chapter-topbottom}
+%\includeonly{ch-intro/chapter-intro, ch-pastwork/chapter-pastwork, ch-topbottom/chapter-topbottom,ch-otherparts/chapter-otherparts,ch-compcert/chapter-compcert}
+%\includeonly{ch-intro/chapter-intro, ch-pastwork/chapter-pastwork, ch-topbottom/chapter-topbottom,ch-otherparts/chapter-otherparts,ch-compcert/chapter-compcert}
+%\excludeonly{ch-appendicies/implementation}
+%\includeonly{ch-appendicies/implementation}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%% Notes:
 
@@ -300,8 +350,9 @@ with shared memory concurrency. }
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%% Import chapters
 \listfiles
-\begin{document}
 
+\begin{document}
+\ifdraft{\listoftodos \newpage}{}
 \maybefrontmatter
 
 % If you've disabled frontmatter, you can insert the toc manually
@@ -311,6 +362,9 @@ with shared memory concurrency. }
 \include{ch-intro/chapter-intro}
 \include{ch-pastwork/chapter-pastwork}
 \include{ch-topbottom/chapter-topbottom}
+\include{ch-CSLsound/chapter-CSLsound}
+\include{ch-ASMproofs/chapter-ASMproofs}
+%\include{ch-otherparts/chapter-otherparts} %Old replaced by CSLsound + ASMproofs
 \include{ch-compcert/chapter-compcert}
 \include{ch-compiler/chapter-compiler}
 \include{ch-conclusion/chapter-conclusion}

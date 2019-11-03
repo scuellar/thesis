@@ -1,0 +1,915 @@
+\chapter[CSL soundness proof]{CSL soundness proof\footnote{It is unusual in a PhD thesis to have an entire chapter authored by someone else.  In this case, my own contribution---compiler correctness for concurrent CompCert based on the CPM---is motivated by and is useful in the context of the ability to prove that a source program has a safe execution in the CPM.  These results, by Madiot, Mansky and Appel, have not yet been published elsewhere.  In order to demonstrate that my own results can integrate into a top-to-bottom verified system, I include the work of those authors here, with their permission. In this chapter, only this footnote and the last section (\ref{sec:erasure}) are my own work; everything else is by the authors mentioned above.}}
+\label{sec:CSLsound}
+
+ 
+
+This section describes how the Concurrent Permission Machine supports a rich logic like Concurrent Separation Logic. 
+A key idea in this process is to define the Juicy Concurrent Machine, which mirrors the CPM but with "juicy" memories and resources instead of CompCert memories and permission maps.
+We start with an overview of CSL, then "juicy" semantics for sequential code and concurrent code (Juicy Concurrent Machine). Finally we show that the CPM simulates the Juicy permission Machine, by erasing the juicy resources into regular permission.
+
+The work in sections \ref{sec:csl}, \ref{sec:juicyseq} and \ref{sec:juicyconc} where developed and written by Jean-Marie Madiot and William Mansky with assistance from Andrew Appel. The erasure proof in section \ref{sec:erasure} was done by the author of this thesis in collaboration with William Mansky.
+
+
+\section{Concurrent Separation Logic}
+\label{sec:csl}
+
+Our CSL's root judgment has the form,
+$\Gamma \vdash_\mathrm{CSL} \Psi:\Gamma'$,
+where $\Gamma$ is a list of function specs
+and $\Psi$ is a list of function bodies.
+It means, assuming all the functions satisfy their specifications
+in $\Gamma$, then each function-body in $\Psi$ does satisfy
+its specification in $\Gamma'$.  Then, one proves
+$\Gamma \vdash_\mathrm{CSL} \Psi:\Gamma$
+to prove that a set of mutually recursive functions satisfy
+all their specs.  (This is not circular reasoning!
+\cite[Equation 81]{appel07:popl}.)
+
+For each function body $c$ one must prove
+$\Delta \vdash_\mathrm{CSL}\{P\} c \{Q\}$,
+where $\Delta$ incorporates both the global $\Gamma$
+and this function's local-variable declarations,
+$P$ is a precondition, and $Q$ is a set of postconditions  \cite[Ch.~24,25]{appel14:plcc}.
+
+\newcommand{\almostempty}[1]{\mbox{almost-empty}~#1}
+\newcommand{\triple}[3]{\left\{#1\right\}\,#2\,\left\{#3\right\}}
+
+\begin{figure}
+
+\begin{minipage}{3.5in}
+\infrule{
+    \mathrm{writable\_share}~\mathit{sh}
+}{
+\{e\Downarrow v \wedge v \stackrel{\mathit{sh}}\mapsto_\mathrm{lock} \_ \}
+~~\mathrm{\mathbf{makelock}}~e~~
+\{v \islocksh{\mathit{sh}} R\}
+}
+
+
+\infrule{
+  \mathrm{writable\_share}~\mathit{sh}\andalso \mathrm{precise}\,R
+  \andalso \mathrm{positive}\,R
+}{
+\{e\Downarrow v \wedge v \islocksh{\mathit{sh}} R\! *\! R\}
+\mathrm{\mathbf{freelock }} ~e \,
+\{v \stackrel{\mathit{sh}}\mapsto_\mathrm{lock} \_  \,*\,R\}
+}
+
+
+\infrule{
+    \mathrm{readable\_share}~\mathit{sh}
+}{
+\{e\Downarrow v \wedge v \islocksh{\mathit{sh}} R\}
+~~\mathrm{\mathbf{acquire}}~e~
+\{
+%\stackrel{\bullet}{\mathrm{hold}}v~*~
+R~ * ~ v \islocksh{\mathit{sh}} R\}
+}
+
+\vspace{1ex}
+
+\infrule{
+    \mathrm{readable\_share}~\mathit{sh} \andalso \mathrm{precise}\,R \andalso \mathrm{positive}\,R
+}{
+\{e\Downarrow v \wedge 
+%\stackrel{\bullet}{\mathrm{hold}}v~*
+~R~*~v \islocksh{\mathit{sh}} R\}
+~~\mathrm{\mathbf{release}}~e~~
+\{v \islocksh{\mathit{sh}} R\}
+}
+
+%F looks like variable here; maybe we could use \bot instead
+\infrule{ \text{EVAL} = e_1\!\Downarrow \!f\wedge e_2 \!\Downarrow \!v
+}{
+\hspace{-1ex}\{EVAL \wedge f\!:\! \{P\}\{\mathrm{F}\}\! \wedge\!
+  P(v)
+  \} \mathrm{\mathbf{spawn}} e_1(e_2) \{ \mathrm{emp}\}\hspace{-1ex}
+}
+\end{minipage}\begin{minipage}{2.5in}
+\caption[Concurrent Separation Logic]{Concurrent Separation Logic. % The notation
+\newline
+  $e\Downarrow v$ means that $e$ evaluates to $v$. \newline
+  $v \stackrel{\mathit{sh}}\mapsto_\tau w$ means that
+  at address $v$, the value $w$ is laid out in memory as a \textsf{struct} of type $\tau$.
+  Share
+  $\mathit{sh}$ is in a lattice between $\circ$ (empty) and $\bullet$ (full);
+  some shares give enough permission for
+  writing (writable\_share~$\mathit{sh}$),
+  and those can be split into readable\_shares that give only read permission
+  (or permission to acquire a lock).
+  $  f\!:\! \{P\}\{Q\}$ says that address $f$ is a
+  function with precondition $P$ and postcondition $Q$.  To spawn $f$,
+  the precondition must be satisfied, and the footprint
+  of $P(v)$ in the parent's precondition disappears into the child.
+  We require $Q=\mathrm{False}$; threads must explicitly call
+  thread-exit (but in this proof we omit thread-exit).
+}
+\label{fig:csl}
+\end{minipage}
+\vspace{-1ex}
+  \end{figure}
+\noindent
+The CSL rules for the concurrency operations are shown in
+\autoref{fig:csl}.
+
+\textsf{Makelock}
+associates with its lock a \emph{resource invariant},
+a separation-logic predicate that characterizes both the \emph{footprint}
+(set of addresses controlled by the lock) and a predicate the
+data at these addresses must satisfy whenever the lock is unlocked.
+The footprint need not be static; for example,
+$ l \islock \exists q. p\mapsto q * \lseg{q}{0} $ says, ``address $l$ is a lock
+controlling access to the linked list whose head-pointer $q$ is stored at address $p$.''
+If $q$ is 0, the footprint is just $\{p\}$,
+but if $q\mapsto (1,q') * q' \mapsto (2,0)$ then
+the footprint is $\{p,q.\mathrm{hd},q.\mathrm{tl},q'.\mathrm{hd},q'.\mathrm{tl}\}$.
+
+Suppose thread $t_1$ creates a new linked-list
+data structure $p$ and a new lock $l_p$
+to control it, so $l_p \islock \exists q. p\mapsto q * \lseg{q}{0}$.
+Now thread $t_1$ wants to tell another thread $t_2$ about this
+lock. Either $t_1$ spawns function $f$ as thread $t_2$, passing $l_p$ as an argument;
+or $t_1$ stores $l_p$ into a shared data structure $s$
+controlled by lock $l_s$ and then releases $l_s$ so that $t_2$
+can acquire $l_s$.  In either case, one separation-logic predicate
+describes
+the binding of a lock-address to its resource invariant, another
+separation logic predicate.  Having one predicate operate on another
+can lead to paradox if not treated carefully,
+so we use a step-indexed model of a modal
+separation logic \cite{hobor10:popl}.
+
+%\footnote{This does not
+%  account for function-parameter passing from the parent to
+%  a newly spawned thread.  The assembly language
+%  that implements spawn must also use a lock to synchronize
+%  this transfer.}
+
+\subsection{Impredicativity and the $\mathsf{spawn}$ Rule}
+All of the CSL rules are impredicative---that is, they quantify over a CSL predicate, the resource invariant associated with the lock.
+Impredicativity gives the power to specify higher-order functions such as 
+$\mathsf{spawn}$: the \textsf{spawn} rule contains not just a predicate but an assertion that a certain pre- and postcondition are associated with its argument, the function to be spawned.
+
+\subsection{Ghost State}
+\label{ghost}
+When proving correctness of complicated concurrent programs, we may want to keep track of more information than just shares of memory locations. Concurrent separation logic becomes much more powerful with the addition of \emph{ghost state}, structured auxiliary state that can be introduced and manipulated as part of the CSL proof. Ghost state is particularly useful for establishing \emph{protocols} on the use of shared resources, so that we can reason more precisely about concurrent interactions. For instance, the program in \autoref{fig:incr} (a C program proved in Coq, but here shown in pseudocode rather than C) increments a lock-protected shared variable twice in parallel. In basic CSL, we can prove that the program executes safely according to a lock invariant such as $\texttt{x} \ge 0$, but not that $\texttt{x} = 2$ at the end of the program. Using ghost state, we can record the contributions made by each thread to \texttt{x} in ghost variables shared between the threads and the lock invariant, allowing us to deduce the precise value of \texttt{x} at the end of the program.
+
+\begin{figure}[htb]
+\centering
+$\texttt{x = 0;}$\\
+$\begin{array}{l || l}
+\texttt{acquire(l);} & \texttt{acquire(l);}\\
+\texttt{x++;} & \texttt{x++;}\\
+\texttt{release(l);} & \texttt{release(l);}
+\end{array}$
+\caption{The increment example}
+\label{fig:incr}
+\end{figure}
+
+The CSL of VST includes ghost state in the style of Iris~\cite{jung2015iris}, in which any \emph{partial commutative monoid} (PCM) can be used as ghost state, including posets, histories, and state machines.
+VST's logic is like Iris's but
+builds on separation algebras instead of resource algebras;
+in either case, these are PCMs with a few additional properties.
+\begin{definition}A \emph{ghost algebra} is a separation algebra with a $\mathsf{valid}$  predicate, such that\newline $\mathsf{valid}(a \cdot b) \Rightarrow \mathsf{valid}(a)$.\end{definition}
+The CSL uses a separation logic assertion $\mathsf{own}(g, a)$ to assert that the current thread owns ghost state $a$ at name $g$. (Note that $\mathsf{valid}(a)$ is a mathematical proposition, while $\mathsf{own}(g, a)$ is a spatial assertion.) This assertion is introduced and manipulated with the rules shown in \autoref{fig:ghost-csl}, using a \emph{view shift} operator $\Rrightarrow$ in the style of Iris. This operator subsumes logical implication, and allows us to make frame-preserving updates to ghost state at any point in a proof.
+
+\begin{figure}[ht]
+\begin{mathpar}
+\inferrule{
+P \Rrightarrow P' \andalso \{P'\}c\{Q'\} \andalso Q' \Rrightarrow Q
+}
+{
+\{P\}c\{Q\}
+}
+
+\inferrule{
+\mathsf{valid}(a)
+}
+{
+\mathrm{emp} \Rrightarrow \exists g, \mathsf{own}(g, a)
+}
+
+\inferrule{
+}
+{
+\mathsf{own}(g, a) \Rrightarrow \mathrm{emp}
+}
+
+\inferrule{
+}
+{
+\mathsf{own}(g, a \cdot b) = \mathsf{own}(g, a) * \mathsf{own}(g, b)
+}
+
+\inferrule{
+}
+{
+\mathsf{own}(g, a) \Rightarrow \mathsf{valid}(a)
+}
+
+\inferrule{
+a \rightsquigarrow b
+}
+{
+\mathsf{own}(g, a) \Rrightarrow \mathsf{own}(g, b)
+}
+\end{mathpar}
+
+\caption{CSL rules for ghost state.}
+\label{fig:ghost-csl}
+\end{figure}
+
+With locks and ghost state, we can prove correctness of a wide range of concurrent programs. The power of the CSL has been demonstrated in an application to a messaging system for shared-memory communication in autonomous vehicles~\cite{mailbox}. This messaging system provides an API through which a writer can make values available to a collection of readers efficiently, while protecting against interference from potentially malicious readers and writers. The proof makes use of ghost variables and histories to track the readers' knowledge of the writer's state and vice versa, using this ghost state to define the protocol by which shares of data buffers are passed between components. The program itself is 170 lines of C code, and the proof in VST is 3600 lines of Coq, showing that readers that use the API correctly always receive the most recently written value.
+
+\subsection{Mechanization}
+VST includes a proof automation system for interactively verifying C programs~\cite{DBLP:journals/jar/CaoBGDA18}, consisting of 1) derived Hoare rules restructured for easier automation and 2) Coq tactics for symbolically executing program instructions and automatically proving separation logic entailments. For the most part, this system can be used as is to verify concurrent programs in our CSL: $\mathsf{release}$, $\mathsf{acquire}$, etc. are treated in the same way as normal function calls, and can be proved with the existing $\mathsf{forward\_call}$ tactic. We have added new tactics $\mathsf{ghost\_alloc}$ and $\mathsf{viewshift\_SEP}$ for introducing and manipulating ghost state, and a $\mathsf{forward\_spawn}$ tactic for applying the $\mathsf{spawn}$ rule, bridging the gap between the precondition of $\mathsf{spawn}$ and that of the spawned function.
+We used these features to verify the C programs described above.
+
+\vspace{1ex}
+\emph{In the next two sections}
+we prove that programs with a correctness proof in Concurrent Separation Logic are
+safe in the Concurrent Permission Machine.  
+
+\section{Juicy Sequential semantics}
+\label{sec:juicyseq}
+
+
+\noindent
+\begin{minipage}[t]{2.6in}
+  \noindent \textbf{The application programmer says,}
+  ``I am the center of the world.  
+  My thread may call functions,
+  even external functions that acquire or release locks,
+  but they return to me just where I left off.
+  Thus I can reason sequentially using the
+  Hoare logic $\{P\}c\{Q\}$, where
+  $c$ may call external functions.''
+  \end{minipage}\hfill
+\begin{minipage}[t]{2.6in}
+  \noindent \textbf{The thread-library author says,}
+  ``I am the center of the world.  I permit
+  a thread to resume, and after a time it comes
+  back to me with a synchronization request.  Perhaps
+  it has pushed or popped its function-call stack
+  in the meantime; that is not my concern; I have
+  many other threads to manage too.''
+  \end{minipage}
+
+\
+
+We reconcile these two views by presenting two
+operational semantics. In \autoref{sec:juicyseq}
+we define the Juicy Sequential semantics, and prove a theorem about it;
+in \autoref{sec:juicyconc} we define the Juicy Concurrent semantics, and prove a theorem;
+the composition of these theorems demonstrates that
+the CSL is sound with respect to CPM executions.
+
+\subsection{Review of VST semantic model}
+\label{subsec:vst-review}
+Appel \emph{et al.} \cite{appel14:plcc} developed a semantic model of sequential separation logic
+with higher-order features intended to support concurrent separation logic.
+In this section, we review that logic and model;
+then we describe the new work that implements and proves CSL.
+
+To reason about concurrent-read/exclusive-write,
+the separation logic predicates (\autoref{fig:csl}) use a
+\emph{share} lattice: a write-share can be split into read-shares,
+which can be further split into more read-shares
+\cite[Chapters 11,41]{appel14:plcc}.
+Also, our predicates permit the description
+of how a lock address is associated with its resource invariant
+(which is another predicate); this permits reasoning about
+programs that dynamically create new locks \cite[Chapter 30]{appel14:plcc}.
+
+The semantic model of our predicates (and our Hoare triple) is
+with respect to a C semantics with enriched states that keep
+track of shares, predicate bindings, and ghost state; we call these
+\emph{juicy memories}.  The CompCert C semantics
+has a simpler permission-lattice than our shares
+(see \autoref{sec:compcert-mem}), and has no notion at all
+of ``predicates in the heap.''  
+At a lower level of our proof, 
+an erasure theorem relates our juicy C semantics to a
+CompCert C semantics.
+
+
+\begin{figure}[t]
+\vspace{-3ex}
+\noindent\infrule[core]{
+  \Psi ~ \vdash_\mathrm{CompCert}~
+  \left<\sigma,m\right> \stackrel{\epsilon}\mapsto \left<\sigma',m'\right>
+ \andalso  \decay{\phi}{m,m'}{\phi'}
+}
+  {
+\mathbf{E}, \Psi ~\vdash_\mathrm{JuicySeq}~ \left<\sigma,\left<\phi,m,\mu\right>\right> \mapsto \left<\sigma',\left<\phi',m',\mu'\right>\right>
+  }
+
+\vspace{-1ex}
+\noindent\infrule[external]{
+\mathrm{atExternal}~\sigma=\mathrm{Some}(f,x) \andalso
+\mathbf{E}(f)=\{P\}\{Q\} \\
+ P y x  (\mathit{jm}) \andalso Q y r (\mathit{jm}') \andalso
+\mathrm{afterExternal}(\sigma,r)=\sigma'
+}
+ {
+\mathbf{E}, \Psi ~\vdash_\mathrm{JuicySeq}~
+\left<\sigma,\mathit{jm}\right> \mapsto
+\left<\sigma',\mathit{jm}'\right>
+} 
+
+\vspace{-1ex}
+\noindent\infrule[no-return]{
+\mathrm{atExternal}~\sigma=\mathrm{Some}(f,x) \andalso
+\mathbf{E}(f)=\{P\}\{Q\} \\
+P y x  (\mathit{jm}) \andalso
+\neg \exists r,\mathit{jm}'.~ Q y r  (\mathit{jm}') \!\!\!
+}
+ {
+\mathbf{E}, \Psi ~\vdash_\mathrm{JuicySeq}~
+\left<\sigma,\mathit{jm}\right> \mapsto
+\left<\sigma,\mathit{jm}\right>
+} 
+
+
+\caption[Juicy Sequential machine]{Juicy Sequential machine, a thread-modular view of a
+  concurrent execution.  External specification $\mathbf{E}$
+  is instantiated with $\mathbf{E}_\mathrm{CSL}$, the Hoare rules of \autoref{fig:csl}.
+}
+\label{fig:juicyseq}
+\end{figure}
+
+We put shares, predicate-bindings, and ghost state
+into a state component $\phi$ called a \emph{resource map},
+a mapping from address to \emph{resource}.
+A resource specifies a share;
+the resource type (ordinary value, callable function, lock);
+for value-type resources, the CompCert value stored at that location;
+for functions, the specification (pre/postcondition);
+for semaphores, the resource invariant.
+% Some resources are \emph{pure} (eternally true,
+% \emph{e.g.}, address $f$ is a function with specification $\{P\}\{Q\}$);
+% others are ephemeral (true at the moment),
+% \emph{e.g.}, address $v$ contains integer value $n$,
+% or address $a$ is a lock with resource invariant $R$.
+Each resource map also contains a finite map of ghost elements: each ghost name is mapped to a dependent pair of a ghost algebra and an element of that algebra. We can add new types of ghost state (i.e., new ghost algebras) on the fly during execution by extending the map.
+Our semantic model is step-indexed \cite{hobor10:popl} to allow higher-order
+impredicative quantification.  Each resource map $\phi$
+has an \emph{approximation level},
+$\mathrm{level}(\phi)$, applied to both invariants and ghost state.
+Higher levels carry more accuracy;
+as the program small-steps, the levels of all the $\phi$ decrease in
+lockstep.
+
+Resource maps form a separation algebra
+with a join operator $\phi_1 \oplus \phi_2 = \phi$,
+a partial function
+corresponding to the separating conjunction:
+$\phi_1 \models P_1$,\ \ $\phi_2 \models P_2$, \ $\phi \models P_1 * P_2$.
+
+A CompCert memory is a map from addresses to values and permissions;
+we couple a resource-map $\phi$ and a memory $m$
+as a \emph{juicy memory} $\mathit{jm}=\left<\phi,m,\mu\right>$
+where $\mu$ is a proof that the permission-shares and values claimed
+by $\phi$ at each address correspond to the CompCert \emph{current}
+permission and contents of $m$.
+The predicates ($\{P\}\{Q\}$ for functions and $R$ for locks)
+have no analog in the ``dry'' memory $m$.
+
+Our ``juicy sequential small-step semantics'' (\autoref{fig:juicyseq})
+steps $\Psi \vdash_\mathrm{JuicySeq} \left<\sigma,\mathit{jm}\right>
+\mapsto \left<\sigma',\mathit{jm}'\right>$.
+The \textsc{core} rule is a restriction of the
+CompCert step (a juicy state steps \emph{only if} its
+internal CompCert state also steps).
+Thus, proving \emph{erasure} (from a \textsc{core} small-step
+in Juicy Sequential to a small-step in CompCert) is trivial.
+But we need to reconstruct the new $\mathit{jm'}$ after
+a core step; hence this lemma is useful:
+
+\begin{lemma}[from Chapter 42 of \cite{appel14:plcc}, extended with ghost state]
+\label{lemma:chap42}
+When $\mu$ proves that $\phi$ corresponds with $m$
+$(\mathit{jm}=\left<\phi,m,\mu\right>)$
+and then $m$ evolves to $m'$ by 
+allocating some blocks, storing at some addresses, and deallocating some blocks,
+we can can find $\phi'$ and $\mu'$ such that 
+$\mathit{jm'}=\left<\phi',m',\mu'\right>$,
+and also $\decay{\phi}{m,m'}{\phi'}$ (that is,
+$\phi,\phi'$ agree on all other addresses).
+\end{lemma}
+
+
+\paragraph{External calls.}
+Stewart \cite[page 119]{stewart15:phd} shows how an interaction
+semantics small-steps across an \emph{external} function
+call $f(x)$.  There is no constructive semantics for such steps;
+instead, we have a \emph{specification} for external functions,
+in the form of a Hoare triple: $\mathbf{E}(f)=
+\{P\}\{Q\}$.
+$P$ is a predicate on ``ghost value'' $y$, function parameter $x$,
+and juicy-memory $\mathit{jm}$.
+The idea is that if (for some $y$) $Pyx(\mathit{jm})$ holds
+as $f(x)$ is called in state $\mathit{jm}$, then (for that $y$) $Qyr
+(\mathit{jm}')$ will hold on the return value $r$ in the after-call state
+$\mathit{jm}'$.  The $y$ allows communication between
+precondition and postcondition.
+
+We instantiate the external specification $\mathbf{E}$ with our
+$\mathbf{E}_\mathrm{CSL}$ that specifies 
+Hoare triples for 
+the synchronization operations
+(acquire, release, makelock, etc.).
+
+When the Juicy Sequential reaches an \emph{external} call, it
+evaluates
+the external-function address $f$ and arguments $\vec{x}$.  Then it
+looks up the \emph{specification} for $f$, and (non constructively)
+finds $y$ such that $Pyx (\mathit{jm})$ holds.  Then it
+(angelically) finds $r, \mathit{jm}'$ such that
+$Qyr (\mathit{jm}')$
+holds.  Finally,
+the afterExternal operation of our interaction-semantics model
+folds the return value $r$ back into the local state \cite{bsda:esop2014}.
+
+But perhaps the external function's postcondition
+is false.  In Hoare logic, that means (essentially) that the function
+never returns; it is \emph{quite} safe to call such a function
+(provided you satisfy its precondition).
+Here we present this as a \textsc{no-return} rule;
+our Coq proofs (and \cite[pages 119--120]{stewart15:phd})
+present the definition of safety more directly.
+
+It may seem backwards to derive the small-step relation from
+the Hoare specification!
+Indeed, it is the job of the \emph{linking theorem} to
+show that the appropriate $y,r, m'$ will exist---
+that the external system
+$\mathbf{E}$ satisfies its Hoare-logic specification.
+Stewart \cite[Thm. 9]{stewart15:phd} showed such a
+linking theorem for modular verification of separately compiled modules.
+\autoref{thm:juicyseq:juicyconc} will be
+a different linking theorem, for
+adding synchronization operators to our core-language \emph{Clight} semantics.
+By this axiomatic treatment of 
+acquire and release, we avoid
+the need for Hobor's oracular semantics \cite{hobor08:esop}.
+
+\paragraph{Step-indexes.}
+A juicy memory $\mathit{jm}=\left<\phi,m,\mu\right>$
+contains a resource-map $\phi$ labeled with a
+step-index \emph{level}.
+The step-indexed predicates 
+(resource invariants, function preconditions)
+bound to addresses in $\phi$  are
+accurate only to that level.
+We define $\mathrm{level}(\mathit{jm})=\mathrm{level}(\phi)$.
+
+\begin{definition}[Sequential safety]
+\label{def:seqsafe}
+A Juicy Sequential state $\left<\sigma,\mathit{jm}\right>$ is \emph{safe},
+written \linebreak
+ $\mathbf{E}, \Psi \vdash_\mathrm{JuicySeq} \mathrm{safe}\left<\sigma,\mathit{jm}\right>$,
+\ if it cannot reach a stuck state within $k=\mathrm{level}(\mathit{jm})$ steps
+in the $\vdash_\mathrm{JuicySeq}$ relation.  \cite[page 393]{appel14:plcc}
+\end{definition}
+
+To prove that a program is safe for $k=10^{99}$ steps,
+choose the program's initial $\phi$ to have level $k$.
+Quantification over the desired execution length $k$
+is done outside any other quantification,
+so we can reason about any finite prefix of the execution of program $\Psi$.
+
+Our CSL
+judgments $\Gamma \vdash_\mathrm{CSL} \Psi:\Gamma'$
+and $\Delta \vdash_\mathrm{CSL}\{P\} c \{Q\}$
+are \emph{not} (deeply embedded / syntactic) inductive predicates!
+They are (shallowly embedded) semantic definitions.
+  $\{P\}c\{Q\}$ means \emph{by definition} \cite[Chapter 43]{appel14:plcc}
+  that in any
+  state satisfying $P$, it is safe to run $c$, and if $c$
+  finishes, it will do so in a state satisfying $Q$.
+
+\autoref{fig:csl} does \emph{not} show the separation logic rules for
+the sequential C language. 
+Appel \emph{et al.} present those rules \cite[Chapter 24]{appel14:plcc}
+and prove them w.r.t.
+the semantic model of the 
+the Juicy Sequential semantics \cite[Part VI]{appel14:plcc}.
+That proof is entirely parametric over $\mathbf{E}$.
+So nothing changes when we now introduce
+concurrency into the language and program logic:
+our CSL includes all the rules of sequential SL.
+
+\subsection{New result: Concurrent Separation Logic is sound}
+Subsection \ref{subsec:vst-review} described previous work,
+with the exception of the enhancement of resource maps (and CSL predicates)
+to handle ghost state, which is new.  This subsection describes a
+new result.
+
+We prove that if a C program is proved correct (to any specification)
+in concurrent separation logic, and its initial thread
+starts in a state satisfying its
+precondition, then its
+(pseudo)sequential execution ($\vdash_\mathrm{JuicySeq}$) will be safe. 
+Safety in $\vdash_\mathrm{JuicySeq}$ implies partial correctness---not shown in \autoref{fig:juicyseq} is the rule
+\cite[pages 119--120]{stewart15:phd} that checks the
+program's postcondition when the program finishes.
+
+\begin{theorem}[Separation Logic Soundness]
+\label{thm:seplogsound}
+Suppose all the functions in program $\Psi$ satisfy their
+specifications in $\Gamma$,
+by a derivation of $\Gamma \vdash_\mathrm{CSL} \Psi:\Gamma$.
+Suppose $\Gamma(f)=\{P\}\{Q\}$, that is,
+calling $f$ with argument $x$
+and ghost value $y$
+we have the Hoare
+triple
+$\{Pyx\}\,r:=f(x)\,\{Qyr\}$.
+  Let $\sigma$ be a local state in which the current command
+  is the function-call $f(v)$.  Let $\mathit{jm}$ be a juicy
+  memory such that $(\sigma,\mathit{jm})$ satisfies $Pyv$.
+  Then
+  $\mathbf{E}_\mathrm{CSL}, \Psi \vdash_\mathrm{JuicySeq}
+  \mathrm{safe}\left<\sigma,\mathit{jm}\right>$.
+\end{theorem}
+\begin{proof}
+  By unfolding the definition of our 
+  $\vdash_\mathrm{CSL}$ judgment.
+%  That is, our Hoare triple is shallowly embedded in Coq;
+%  $\{P\}c\{Q\}$ means \emph{by definition} that in any
+%  state satisfying $P$, it is safe to run $c$, and if $c$
+%  finishes, it will do so in a state satisfying $Q$.
+\end{proof}
+
+
+
+\section{The juicy concurrent machine}
+\label{sec:juicyconc}
+
+\begin{figure}
+\vspace*{-1.1ex}
+% \infrule[start]{
+%   s_i=\left<\mathrm{Start}(f,a)\right> \!\!\!\!\!\!\andalso
+%  \vec{s}'=\vec{s}[i\mapsto \left<\mathrm{Run},\mathrm{initialCore}(f,a)\right>]
+% }
+%   {
+% \Psi \vdash_\mathrm{JuicyConc} \!\!
+% \left<i\cdot\mho, (\vec{s}, \vec{\phi}, L), m \right>
+% \mapsto
+% \left<i\cdot\mho, (\vec{s}', \vec{\phi}, L), m \right>
+% \!\!  }
+% \vspace{-1.1ex}
+% \infrule[resume]{
+%   s_i=\left<\mathrm{Resume}(v),\sigma\right> \andalso
+%   \mathrm{afterExternal}(\sigma,v)=\sigma'\andalso
+%  \vec{s}'=\vec{s}[i\mapsto \left<\mathrm{Run},\sigma'\right>]
+% }
+%   {
+% \Psi \vdash_\mathrm{JuicyConc} 
+% \left<i\cdot\mho, (\vec{s}, \vec{\phi}, L), m \right>
+% \mapsto
+% \left<i\cdot\mho, (\vec{s}', \vec{\phi}, L), m \right>
+%   }
+% \vspace{-1.1ex}
+
+\infrule[core]{
+ s_i=\left<\mathrm{Run},\sigma\right> \andalso
+ \decay{\phi_i}{\setcur{m}{\phi_i},\, m'}{\phi'} \andalso
+  \Psi ~ \vdash_\mathrm{CompCert}~
+  \left<\sigma,\setcur{m}{\phi_i}\right> \stackrel{\epsilon}\mapsto \left<\sigma',m'\right>\\
+  \vec{s}'=\vec{s}[i\mapsto \left<\mathrm{Run},\sigma'\right>] \andalso
+  \vec{\phi}'=\vec{\phi}[i \mapsto \phi']
+}
+  {
+\Psi \vdash_\mathrm{JuicyConc} \!\!
+\left<i\cdot\mho, (\vec{s}, \vec{\phi}, L), m \right>
+\mapsto
+\left<i\cdot\mho, (\vec{s}', \vec{\phi}', L), m'\right>
+ \!\!\!
+  }
+
+% \vspace{-1.1ex}
+% \infrule[suspend]{
+%  s_i=\left<\mathrm{Run},\sigma\right> \andalso
+%  \mathrm{atExternal}~\sigma=\mathrm{Some}(f,\vec{x}) \!\!\!\andalso
+%   \vec{s}'=\vec{s}[i\mapsto \left<\mathrm{Blocked},\sigma\right>]}
+%   {
+% \Psi \vdash_\mathrm{JuicyConc} 
+% \left<i\cdot\mho, (\vec{s}, \vec{\phi}, L), m \right>
+% \mapsto
+% \left<\mho, (\vec{s}', \vec{\phi}, L), m \right>
+%   }
+% 
+% \vspace{-1.1ex}
+% \infrule[stutter]{
+%   (s_i=\left<\mathrm{Blocked},\sigma\right> \wedge
+%    \mathrm{atExternal}~\sigma=\mathrm{Some}(\mathrm{Exit},\_)
+%    %\mathrm{halted}~\sigma
+%    )
+%  ~\vee~ \neg(0 \le i < |\vec{s}|)
+% }  {
+% \Psi \vdash_\mathrm{JuicyConc} 
+% \left<i\cdot\mho, (\vec{s}, \vec{\phi}, L), m \right>
+% \mapsto
+% \left<\mho, (\vec{s}, \vec{\phi}, L), m \right>
+% }
+
+\vspace{-1.1ex}
+\infrule[acquire]{
+ s_i=\mathrm{Blocked}(\sigma) \!\!\andalso
+  \mathrm{atExternal}~\sigma=\mathrm{Some}(\mathrm{Acquire},a) \andalso
+  \phi_i(a)= \mathrm{Lock}~R \\
+  \setcur{m}{\hat{L}}(a)=1 \!\!\andalso \setcur{m}{\hat{L}}[a\mapsto 0]=m' \andalso
+  L(a)=\mathrm{Some}(\mathrm{Some}\,\delta)\!\!
+  \andalso \phi_i \oplus \delta = \phi' \\
+  \vec{\phi}[i\mapsto \phi']=\vec{\phi}' \!\!\andalso
+  \vec{s}[i\mapsto \!\!\mathrm{Resume}(0,\sigma)]=\vec{s}' \!\!\andalso
+  L[a\mapsto \! \mathrm{Some}(\mathrm{None})]=L'
+}{
+\Psi \vdash_\mathrm{JuicyConc} 
+\left<i\cdot\mho, (\vec{s}, \vec{\phi}, L), m \right>
+\mapsto
+\left<\mho, (\vec{s}', \vec{\phi}', L'), m'\right>\!\!
+  }
+
+\vspace{-1.1ex}
+\infrule[acqfail]{
+ s_i=\mathrm{Blocked}(\sigma) \hspace*{-.15in} \andalso
+  \mathrm{atExternal}~\sigma=\mathrm{Some}(\mathrm{Acquire},a) \hspace*{-.15in} 
+\andalso
+\phi_i(a)= \mathrm{Lock}~R \hspace*{-.15in} \andalso
+m(a)=0  \hspace*{-.5in} 
+}{
+\Psi \vdash_\mathrm{JuicyConc} 
+\left<i\cdot\mho, (\vec{s}, \vec{\phi}, L), m \right>
+\mapsto
+\left<\mho, (\vec{s}, \vec{\phi}, L), m \right>
+\hspace*{-.6in} 
+  }
+
+\vspace{-1.1ex}
+\infrule[release]{
+\hspace*{-.3in}
+ s_i=\mathrm{Blocked}(\sigma) \andalso
+  \mathrm{atExternal}~\sigma=\mathrm{Some}(\mathrm{Release},a) \andalso
+  \phi_i(a)= \mathrm{Lock}~R \hspace*{-.6in} \\
+  \setcur{m}{\hat{L}}(a)=0 \andalso \setcur{m}{\hat{L}}[a\mapsto 1]=m' \andalso
+L(a)=\mathrm{Some}(\mathrm{None}) \andalso
+  \delta\models R \andalso \delta \oplus \phi' = \phi_i \hspace*{-.8in} \\
+\hspace*{-.2in}
+  \vec{s}[i\mapsto \mathrm{Resume}(0,\sigma)]=\vec{s}' \hspace*{-.15in}
+  \andalso
+  \vec{\phi}[i\mapsto \phi']=\vec{\phi}' \hspace*{-.1in} \andalso
+  L[a\mapsto \,\mathrm{Some}(\mathrm{Some}\,\delta)]=L'
+\hspace*{-.3in}
+}
+{\Psi \vdash_\mathrm{JuicyConc} 
+\left<i\cdot\mho, (\vec{s}, \vec{\phi}, L), m \right>
+\mapsto
+\left<\mho, (\vec{s}', \vec{\phi}', L'), m'\right>
+\hspace*{-.6in}
+  }
+
+\vspace{-1.1ex}
+\infrule[spawn]{
+ s_i\!=\!\mathrm{Blocked}(\sigma) \!\!\!\!\andalso
+  \mathrm{atExternal}\,\sigma\!=\!\mathrm{Some}(\mathrm{Spawn}(f,a)) \!\!\!\andalso
+  \phi_i(f)=\mathrm{Func}\{P\}\{Q\} \\
+  \delta\models P(a) \!\!\!\andalso \delta \oplus \phi' = \phi_i \\
+  \vec{s}[i\mapsto\mathrm{Resume}(0,\sigma)]\cdot \left<\mathrm{Start}(f,a)\right> =\vec{s}' \!\!\!\andalso
+  \vec{\phi}[i\mapsto \phi']\cdot \delta =\vec{\phi}'
+}
+{\Psi \vdash_\mathrm{JuicyConc} 
+\left<i\cdot\mho, (\vec{s}, \vec{\phi}, L), m \right>
+\mapsto
+\left<\mho, (\vec{s}', \vec{\phi}', L'), m \right>
+\!\!\!
+  }
+% 
+% \vspace{-1.1ex}
+% \infrule[makelock]{
+% \hspace*{-.2in}
+%   s_i\!=\!\left<\mathrm{Blocked},\sigma\right> \!\!\!\!\andalso
+%   \mathrm{atExternal}\,\sigma\!=\!\mathrm{Some}(\mathrm{Makelock}~a) \!\!\!\andalso
+%   \phi_i(f)=\mathrm{Val}(\_) \hspace*{-.3in}\\
+%   \mathrm{guess}~R \andalso \mathrm{writable}(\phi_i(a)) \andalso
+%   \phi' = \phi[a\mapsto \mathrm{Lock}\,R] \hspace*{-.5in}\\
+%   m[a\mapsto 0]=m' \andalso
+%   \vec{\phi}[i\mapsto \phi']=\vec{\phi}' \andalso
+%   \vec{s}[i\mapsto \left<\mathrm{Resume}(),\sigma\right>]=\vec{s}'
+% }
+% {\Psi \vdash_\mathrm{JuicyConc} 
+% \left<i\cdot\mho, (\vec{s}, \vec{\phi}, L), m \right>
+% \mapsto
+% \left<\mho, (\vec{s}', \vec{\phi}', L'), m' \right>
+% \!\!\!
+%   }
+\vspace{-2ex}
+\caption[Juicy Concurrent machine]{Juicy Concurrent machine.
+  Rules for \textsc{start}, \textsc{resume}, \textsc{suspend} %, \textsc{stutter}
+  are not shown here; they look identical to those of the CPM (Fig. \ref{fig:dry-concurrent})
+  except that they use $\phi$ (resource map) instead of $\pi$ (permission).
+  Rules for \textsc{makelock}, \textsc{freelock} are omitted.
+  Event traces $\epsilon$ are omitted; see the supplement (part A).
+}
+\label{fig:juicy-concurrent}
+\end{figure}
+
+
+
+By \autoref{thm:seplogsound}, the
+CSL is sound with respect to a predicate-annotated,
+  per\-mis\-sion-annotated, (pseudo)se\-quen\-tial operational semantics, the \emph{Juicy Sequential Machine}.
+  The predicate annotations---\emph{resource invariants} of CSL---specify
+  how permissions are transferred by synchronizations.
+  Safety (correctness) in the (pseudo)sequential semantics implies
+  safety (correctness) in a predicate-annotated, per\-mis\-sion-annotated,
+  operational semantics for cooperative concurrency,
+  the \emph{Juicy Concurrent Machine}.
+  At the end of this section, we show how to erase the predicates:
+  the \emph{Juicy Concurrent Machine} is simulated by the CPM.
+
+  \autoref{fig:juicy-concurrent} shows the Juicy Concurrent machine,
+  which may be seen as a variant of a CPM where CompCert permissions
+  are replaced by the the more expressive notion of \emph{resources}
+  and no angelic guessing is necessary.  States take the form
+  $\left<\mho, (\vec{s}, \vec{\phi}, L), m \right>$, where $\mho$, $\vec{s}$, and $m$ are as before, and 
+\begin{itemize}
+% \item[$\mho$] is a (cooperative) schedule,
+% a finite sequence of natural numbers indicating
+% what thread to run next.
+% We approximate infinite computations by
+% quantifying over all finite prefixes.
+% \item[$\vec{s}$] is a list of marked local states;
+%   $s_i \in \{\mathrm{Start}(f,a),\mathrm{Run}(\sigma_i),
+%   \mathrm{Blocked}(\sigma_i),\mathrm{Resume}(v_i,\sigma)\}$,
+%   where $\sigma_i$ is the $i$th thread's local state.
+%   $\mathrm{Start}(f,a)$ denotes that the thread should start by
+%   calling function $f$ with arguments $a$;
+%   $\mathrm{Resume}(v,\sigma_i)$ means that an external call has
+%   returned value $v$ to be fed back to the thread.
+\item[$\vec{\phi}$] is a list of resource maps.
+  Each $\phi_i$ is a thread's own view of memory and ghost state.
+\item[$L$] is a function from address to option(option(resource-map)),
+  indicating the state of each lock: $L(a)=\,$None means that $a$ is not
+  a lock, Some(None) means that $a$ is locked.  Some(Some~$\phi_a$) means
+  $a$ is unlocked and $\phi_a$ is the resource that a thread would obtain
+  by acquiring $a$.  
+\item[$m$] is the global memory, shared by all threads.
+\end{itemize}
+We say $\mathrm{coherent}(\vec{\phi},L,m)$ when
+the resource maps in $\vec{\phi}$ and $L$ join together to a
+$\phi_\mathrm{tot}$ that agrees with $m$
+on max permissions and the contents of memory cells.
+By the nature of our
+join relation, that also means that the $\phi_i$ and the $\phi_a$
+all have the same step-index level and
+are all mutually noninterferent; at no address does $\phi_i$
+grant write permission and $\phi_j$ \linebreak[3] $(j\not= i)$
+grant read or write permission.
+(Not shown in \autoref{fig:juicy-concurrent}:
+the \textsc{acquire} and \textsc{release} rules
+must ``age'' $\vec{\phi}'$ and $L'$ by one step-index.)
+
+
+The operator $\setcur{m}{\phi_i}$ constructs a memory like $m$ but
+whose current permissions are restricted to $\phi_i$, so that
+$\left<\phi_i,\setcur{m}{\phi_i},\mu \right>$ is a juicy memory
+(provided that $\phi_i$ and $m$ agree about the value at each
+address).  The \textsc{core} rule of the JuicyConc semantics says that
+the machine small-steps a thread ensuring that the core step (in
+Clight or assembly language) does not interfere with other threads'
+data (and with resources stashed in unlocked locks).  We write
+$\setcur{m}{\hat{L}}$ to set write-permission in $m$ at those
+addresses that $L$ identifies as locks.
+
+
+The \textsc{core} rule implements cooperative concurrency: it learns
+from the schedule that the $i$th thread is to be stepped, and leaves
+$i$ at the head of the schedule.  When the thread reaches atExternal
+(a \textsc{suspend} step), $i$ will be consumed. This enforces that at
+most one thread is marked $\mathrm{Run}$.
+
+\begin{definition}[State Invariant]
+\label{def:state-invariant}
+  Given program specification $\Gamma$
+  and JuicyConc state \linebreak
+  $S=\left<\mho, (\vec{s},\vec{\phi}, L), m\right>$,
+  we say $\mathrm{StateInvar}_n(\Gamma,S)$ when,
+\begin{itemize}
+\item All the resource maps in $\vec{\phi}$ and $L$ join together
+  to make a total resource map $\phi_\mathrm{tot}$,
+  whose step-index level is $n$; note that this implies $\mathrm{coherent}(\vec{\phi},L,m)$.
+\item At most one $s_i$ is marked as $\mathrm{Run}$, and (if so) $i$ is at the head of $\mho$.
+\item The function specifications in $\phi_\mathrm{tot}$ are
+  exactly those of $\Gamma$.
+% \item All the resource invariants in the range of $L$ are precise.
+\item Whenever $L(a)=\mathrm{Some}(\mathrm{Some}~\phi_a)$,
+  then $\exists R.~\phi_\mathrm{T}(a)=\mathrm{Lock}~R$ with resource
+  invariant $R$ and $\phi_a \models R$.  Otherwise, if
+  $L(a)=\mathrm{Some}(\mathrm{None})$, then $\exists
+  R.~\phi_\mathrm{T}(a)=\mathrm{Lock}~R$, and if $L(a)=\mathrm{None}$
+  then $\phi_\mathrm{T}(a)$ is not of the form $\mathrm{Lock}~R$.
+\item Each thread is safe:
+  the state 
+  $\left<\sigma_i,\left<\phi_i,\setcur{m}{\phi_i},\mu\right>\right>$ cannot get stuck in $\vdash_\mathrm{JuicySeq}$ within $n$ steps.% $\mathrm{level}(\phi_\mathrm{T})$ steps.
+\end{itemize}
+\end{definition}
+  
+\begin{lemma}[Safety induction]
+\label{lem:juicy-conc-lemma}
+If $\Gamma \vdash_\mathrm{CSL} \Psi:\Gamma$ and
+$\mathrm{StateInvar}_n(\Gamma,S)$
+and $n>0$, then there \linebreak is a state $S'$
+and $n-1 \le n'\le n$
+such that 
+$\Psi \vdash_\mathrm{JuicyConc} S \mapsto S'$
+and \linebreak $\mathrm{StateInvar}_{n'}(\Gamma,S')$.
+\end{lemma}
+\begin{proof} See the supplement.
+\end{proof}
+
+\begin{definition}[Safety]
+\label{def:safety}
+  A JuicyConc state is \emph{safe}$_k$,  written \\
+  $\Psi \vdash_\mathrm{JuicyConc} \mathrm{safe}_k\left<\mho, (\vec{s},\vec{\phi}, L), m\right>$,
+  when either
+  \begin{itemize}[itemindent=-1em]
+  \item $\mho=\mathrm{nil}$ ~or~ $k=0$,
+  \item $\Psi \vdash_\mathrm{JuicyConc} \left<\mho, (\vec{s},\vec{\phi}, L), m\right>\mapsto 
+    \left<\mho, (\vec{s}',\vec{\phi}', L'), m'\right>$
+ \\   and ~~$\Psi \vdash_\mathrm{JuicyConc} \mathrm{safe}_{k-1}\left<\mho, (\vec{s}',\vec{\phi}', L'), m'\right>$, ~~or
+  \item $\mho\!= \!i \cdot \mho'$ and 
+  $\Psi \vdash_\mathrm{JuicyConc} \left<i \cdot \mho', (\vec{s},\vec{\phi}, L), m\right>\mapsto 
+    \left<\mho', (\vec{s}',\vec{\phi}', L'), m'\right>$ \\
+    and  ~~$\forall \mho''.~\Psi \vdash_\mathrm{JuicyConc} \mathrm{safe}_{k-1}\left<\mho'', (\vec{s}',\vec{\phi}', L'), m'\right>$.
+  \end{itemize}
+\end{definition}
+This is \emph{almost} a conventional inductive definition of safety,
+except that after consuming one step of schedule $\mho$,
+the remaining state must be safe for \emph{all possible} schedules.
+
+\begin{theorem}[Safety of the Juicy Concurrent machine]
+\label{thm:juicyseq:juicyconc}
+We wish to run $\Psi$ for $k$ steps.
+Suppose $\Psi$ satisfies its specification $\Gamma$, that is,
+$\Gamma \vdash_\mathrm{CSL} \Psi:\Gamma$.
+Let $m_0$ be the initial memory for $\Psi$.
+% that is, with $\Psi$'s global variables initialized.
+Let $\sigma_0$ be the initial state, calling 
+\textsf{main()}.
+Let $\left<\phi_0,m_0,\mu_0\right>$ be a juicy memory
+with $\mathrm{level}(\phi)=k$
+(one can always construct this).
+Let $L_0 = \lambda a.\mathrm{None}$ be the (empty) initial lock pool.
+Let $\mho$ be any schedule.
+Then the Juicy Concurrent state
+$\left<\mho, ([\left<\mathrm{Run},\sigma_0\right>],[\phi_0], L_0), m_0\right>$
+is safe$_k$.
+\end{theorem}
+\begin{proof}
+  StateInvar holds initially, since $L$ is empty and $\vec{\phi}$ has
+  only one thread.
+  Then we apply \autoref{lem:juicy-conc-lemma}.  However, because of our
+  stronger notion of safety, we also use a lemma stating
+  that StateInvar is preserved when changing the ``remainder'' of the
+  schedule.
+\end{proof}
+
+\section{CPM simulates the Juicy Concurrent Machine}\label{sec:erasure}
+
+\begin{definition}[Erasure from JuicyConc to CPM]
+\label{def:erasure}
+  Let $S$ be a JuicyConc state.  We define $\hat S$, the erasure of $S$,
+  as the CPM state obtained
+  by converting all resource maps $\phi$ to permission maps $\pi$.
+\end{definition}
+
+\begin{theorem}[Erasure]
+\label{thm:erasure}
+  For any juicy step $\Psi \vdash_\mathrm{JuicyConc} S \mapsto S'$,
+  there exists a Concurrent Permission Machine step
+  $\Psi \vdash_\mathrm{CPM} \hat S
+  \stackrel{\epsilon}\mapsto \hat S'$.
+\end{theorem}
+\begin{proof}
+  Converting $\phi$ to $\pi$ is easy. But we must
+  demonstrate guesses $\delta$ such that
+  CPM execution is not stuck.  These guesses come from the
+  resource maps $\delta$ in the \textsc{acquire},
+  \textsc{release}, and \textsc{spawn} rules of $\vdash_\mathrm{JuicyConc}$.
+  Traces $\epsilon$ are derived from the other constraints
+  of a CPM execution.
+\end{proof}
+
+\begin{corollary}[CSL implies the CPM is safe]
+\label{thm:csl-cpm-safe}
+  If a Clight program is proved correct in Concurrent Separation Logic,
+  then its execution in the Concurrent Permission Machine is safe.
+\end{corollary}
+\begin{proof}
+By theorems \ref{thm:juicyseq:juicyconc} and
+\ref{thm:erasure}.
+\end{proof}
+

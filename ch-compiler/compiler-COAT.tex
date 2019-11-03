@@ -1,0 +1,304 @@
+\section{Compiling One At a Time (COAT)}\label{sec:coat}
+
+Beringer et al.~\cite{bsda:esop2014} explained how CompCert does not guarantee, for its modules, the properties it requires from external functions. For example, CompCert requires that external functions do not modify locations in memory that are not allocated in the target program, while a CompCert function can modify a local variable that is never used and is removed by the compiler. This problem appears with recursive modules, in separate compilation, and with threads, modeled as external functions, in concurrent programs. To solve this asymmetry, Beringer et al. developed Logical Simulation Relations and later Stewart et al. \cite{compcomp} improved them with structured simulations. Kang et al. \cite{Kang2017promising} avoid the problem by using the same compiler for all modules, but can't support different compilers or concurrency.
+
+We propose a completely different approach. We observed that the problem disappears if external functions are not compiling at the same time that we compile internal functions. But how can we support mutually recursive modules and concurrency (modeled as external functions) if the external functions can't be compiled? We can mathematically model a program where only one thread has been compiled and prove a simulation between the source program and the ``partially compiled" program. We can then repeat the process with one thread at a time proving a simulation at each step. Finally, we compose all the simulations to obtain a simulation between the source program and the compiled one.
+
+To model an execution where only some threads have been compiled, we construct a \emph{Hybrid Machine}, namely a CPM such that some threads execute assembly code, from the compiled program, and some threads execute C code, from the source program. The use of interaction semantics in the CPM ensures that the different semantics compose properly in the Hybrid Machine.
+
+ 
+%\subsubsection{An example of fragmentary compilation.}
+%
+%Start with an example.
+
+\subsection{The Hybrid Machine}
+
+The Hybrid machine is a two-language Concurrent Permission Machine, indexed by a \emph{hybrid bound}, $\text{hb} \in \nat + \infty$. It operates over states of the form 
+$\langle\mho, (\vec{h}, \vec{\pi}, L), m \rangle$, where  $\mho, \vec{\pi}, L$ and $m$ are the schedule, the list 
+of permissions, the lock permissions and the global memory, just like in the CPM. 
+The hybrid list of states $\vec{h}$ contains marked local states, such that the first \matht{hb} states are in Assembly and the rest in Clight. 
+
+%% Internal steps and initial
+%NOTE: cahnged \left < with \langle (and right too), because the h makes too large and ugly!
+\begin{figure}
+
+%INIT SOURCE
+\infrule[start src]{
+\text{hb} \leq i \andalso
+  h_i\!=\!\mathrm{Start}(f\!,\!a) \\
+ \vec{h}'\!=\!\vec{h}[i\!\mapsto \!\mathrm{Run}(\mathrm{initialCore}_{\text{Clight}}(f,a))]
+}
+  {
+\Psi,\Phi \vdash_\mathrm{HM_{hb}} 
+\langle i\cdot\mho, (\vec{h}, \vec{\pi}, \lockpool), m \rangle
+\stackrel{~}\mapsto
+\langle i\cdot\mho, (\vec{h}', \vec{\pi}, \lockpool), m\rangle
+  }
+
+%INIT TARGET
+\infrule[start tgt]{
+i < \text{hb}  \andalso
+  h_i\!=\!\mathrm{Start}(f\!,\!a) \\
+ \vec{h}'\!=\!\vec{h}[i\!\mapsto \!\mathrm{Run}(\mathrm{initialCore}_{\text{Asm}}(f,a))]
+}
+  {
+\Psi,\Phi \vdash_\mathrm{HM_{hb}} 
+\langle i\cdot\mho, (\vec{h}, \vec{\pi}, \lockpool), m \rangle
+\stackrel{~}\mapsto
+\langle i\cdot\mho, (\vec{h}', \vec{\pi}, \lockpool), m\rangle
+  }
+  
+  
+%Internal step SRC
+\infrule[core src]{
+\text{hb} \leq i \andalso
+ h_i=\mathrm{Run}(\sigma) \!\!\!\andalso
+  \Psi  \vdash_\mathrm{Clight}
+  \langle\sigma,\setcur{m}{\pi^1_i}\rangle \stackrel{\epsilon}\mapsto \langle\sigma',m'\rangle\\
+%  \pi'^1=\mathrm{Cur}(m') \andalso  \pi'^2=\pi^2_i\\
+  \vec{h}'=\vec{h}[i\mapsto \mathrm{Run}(\sigma')] \andalso
+  \vec{\pi}'=\vec{\pi}[i \mapsto (\mathrm{Cur}(m'),\pi^2_i)]
+}
+  {
+\Psi,\Phi \vdash_\mathrm{HM_{hb}} \!\!
+\langle i\cdot\mho, (\vec{h}, \vec{\pi}, \lockpool), m \rangle
+\stackrel{\epsilon_i}\mapsto
+\langle i\cdot\mho, (\vec{h}', \vec{\pi}', \lockpool), m'\rangle\!\!
+  }
+  
+  
+%Internal step SRC
+\infrule[core tgt]{
+i < \text{hb}  \andalso
+ h_i=\mathrm{Run}(\sigma) \!\!\!\andalso
+  \Phi  \vdash_\mathrm{Asm}
+  \langle\sigma,\setcur{m}{\pi^1_i}\rangle \stackrel{\epsilon}\mapsto \langle\sigma',m'\rangle\\
+%  \pi'^1=\mathrm{Cur}(m') \andalso  \pi'^2=\pi^2_i\\
+  \vec{h}'=\vec{h}[i\mapsto \mathrm{Run}(\sigma')] \andalso
+  \vec{\pi}'=\vec{\pi}[i \mapsto (\mathrm{Cur}(m'),\pi^2_i)]
+}
+  {
+\Psi,\Phi \vdash_\mathrm{HM_{hb}} \!\!
+\langle i\cdot\mho, (\vec{h}, \vec{\pi}, \lockpool), m \rangle
+\stackrel{\epsilon_i}\mapsto
+\langle i\cdot\mho, (\vec{h}', \vec{\pi}', \lockpool), m'\rangle\!\!
+  }
+ 
+\caption[Hybrid Machine semantics]{Hybrid Machine semantics: internal steps and start thread. }
+\label{fig:hybrid}
+\end{figure}
+
+The semantics of the Hybrid Machine employs judgments similar to that of the CPM,
+%\vspace{-2ex}$
+$ \Psi, \Phi \vdash_\mathrm{HM_{hb}}
+\langle\mho, (\vec{h}, \vec{\pi}, \lockpool), m \rangle
+\stackrel{\epsilon}\mapsto     \langle\mho', (\vec{h}', \vec{\pi}',
+  \lockpool'), m' \rangle, $
+with some rules shown in \cref{fig:hybrid}. $\Psi$ and  $\Phi$ are the source and compiled programs, respectively. 
+When a new thread is spawned, if its index is above the hybrid bound \matht{hb}, 
+it will run the code in the source program $\Psi$ and will run the compiled code otherwise. 
+The internal steps will execute according to the index of the thread, above the \matht{hb} 
+it will use the Clight semantics and below it executes with Assembly.
+
+%\paragraph{Remark:} 
+The hybrid machine presented here only contains two programs in two languages and is indexed by a hybrid bound. This is the form we use in the proofs presented in this work. However, the hybrid machine can be instantiated with an arbitrary number of programs (or modules), each in a different language, and threads can be spawned from any of the modules and execute in the corresponding language. For example, in \cref{sec:shortfuture}, we propose a hybrid machine that keeps the first thread in Clight to reason about transformations of the global environment. In \cref{sec:sepcomp}, we propose a hybrid machine with arbitrary languages to tackle separate compilation. 
+
+Notice that the the hybrid machine with $\text{hb} = 0$ will never consult the compiled program, and will always execute in the source language, just like CPM in Clight. Similarly, the hybrid machine with $\text{hb} = \infty$ behaves just like the CPM in Assembly. We can almost say the ``$\CPM\ (P)=\HM_0\ (P,Q)$" and ``$\CPM\ (Q)=\HM_{\infty}\ (P,Q)$", except the types don't match, but we can formalize it as follows:
+
+\begin{remark}\label{thm:hybridiso} For all programs $\Psi$ and $\Phi$, there is an isomorphism between $\CPM\ (\Psi)$ and $\HM_0\ (\Psi,\Phi)$ and another isomorphism between $\CPM\ (\Phi)$ and $\HM_0\ (\Psi,\Phi)$. The isomorphisms map states and steps to identical states and steps, but change the types appropriately. If an operating system has a bound $n$ to the number of threads that a program can spawn, then there is also an isomorphism between $\CPM\ (\Phi)$ and $\HM_n\ (\Psi,\Phi)$.
+
+Moreover, the simulation relation in \cref{def:cpmsim} extends naturally to hybrid machines.
+\end{remark}
+
+\subsection{COAT proof of compiler correctness}\label{sec:coatproof}
+
+Following \cref{thm:hybridiso}, the proof of our compiler correctness \cref{thm:compspec} can be reduced to the following theorem
+
+\begin{theorem}\label{thm:compspechyb}
+Given a source program P and an x86 assembly language program Q obtained by CompCert compilation of P, the source and target hybrid machines are in a simulation relation:
+$$\HM_{0}(\text{P},\text{Q}) \gtrsim \HM_{\infty}(\text{P},\text{Q}).$$
+\end{theorem}
+
+The proof proceeds in three steps, which we formalize in lemmas below: first we show that ``adjacent" hybrid machines are in a simulation relation; second, we compose the simulations shown in the previous step to prove that the source machine ($\HM_{0}$) simulates any of the finite machines ($\HM_{n}$); finally, we show that simulating all ``finite" hybrid machines, is enough to simulate the target machine ($\HM_{\infty}$). For the rest of this chapter, we assume that P and Q are the source and compiled programs as defined in \cref{thm:compspechyb}.
+
+\begin{lemma}[Compile one thread]\label{thm:COT} For all  $n\in \nat$,  $\HM_{n}(\text{P},\text{Q}) \gtrsim \HM_{n+1}(\text{P},\text{Q})$. \end{lemma}
+
+The first step to proving the simulation in \cref{thm:COT}, we must define a match relation $\succsim_j$ for CPM states. We do this below, with the Coq implementation details in \cref{sec:implementation:compiler}. 
+%To prove the simulation of the CPM, we will have to show that the match relation $\succsim_j$ can be established at the start of any execution and it's preserved through every step.  
+
+\begin{fndefinition}{The coq implementation is presented in \cref{coq:matchstateCPM}}\label{def:CPMmatch} We say two CPM states are in a match relation (indexed by a memory injection $j$),
+$\left<\mho_1, (\vec{s}_1, \vec{\pi}_1, L_1), m_1 \right>  \succsim_j \left<\mho_2, (\vec{s}_2, \vec{\pi}_2, L_2), m_2 \right> $,
+when they satisfy the properties below:
+\begin{enumerate}[(a)]
+\item The schedules are equal $\mho_1 = \mho_2$.
+\item Both states have the same number of threads ($|\vec{s}_1| = |\vec{s}_2|$).
+\item Both states are coherent (\cref{def:dry-coherent}).
+\item For every location mapped by the memory injection $j$, the permissions of each thread for this location, is preserved.
+\item The memories restricted to the permissions of a thread are injected, 
+$$\forall i, \setcur{m_1}{\pi^1_{1,i}} \injarrow{j} \setcur{m_2}{\pi^2_{2,i}} \ \ \text{ and } \ \ \forall i, \setcur{m_1}{\pi^2_{1,i}} \injarrow{j} \setcur{m_2}{\pi^2_{2,i}}$$
+\item Locks are preserved by the injection with the same state (locked or unlocked) and their ressources are injected:
+$$ \begin{array}{cc} 
+\forall l_1 \ z \ \delta_1,  ~ L_1\ (l_1,z) = \text{Some } \delta_1 & \rightarrow \\
+\exists l_2 \ d \ , ~ j ~ l_1 = \text{Some }(l_2,d) &\wedge	\\
+	L_2\ (l_2,z+d) = \text{Some } \delta_2 &\wedge \\
+	\delta_1 \injarrow{j} \delta_2
+	\end{array}
+	$$
+\item Each thread $i<n$ is in Assembly for both CPMs and the thread states are related by an injection relation. The injection of Assembly states is given by the self simulation of the assembly languge in \cref{thm:selfsim}. %The injection of marked states is defined in \cref{def:matchmarkedstates}. 
+\item Each thread $i>n$ is in Clight for both CPMs and the thread states are related by an injection relation. The injection of Clight states is given by the self simulation of the Clight language in \cref{thm:selfsim}. %The injection of marked states is defined in \cref{def:matchmarkedstates}. 
+\item The $n$th thread in $\vec{s}_1$ is in Clight and in $\vec{s}_2$ is in Assembly. A Clight and an Assembly state are in a match relation, as defined by the MOIST specification of CompCert in \cref{thm:moistsim}. We lift this match to marked states in \cref{def:matchmarkedstates}. 
+\end{enumerate}
+\end{fndefinition}
+
+\begin{proof}[Proof of \cref{thm:COT}] This proof relies on several lemmas that will be detailed through the rest of this chapter (sections \ref{sec:selfsim} and \ref{sec:simSync}). We use the match relation defined in \cref{def:CPMmatch} and we consider, in order, each condition necessary to establish a simulation (\cref{def:cpmsim}):
+\begin{enumerate}
+\item [1, 2, 3.] The first three properties follow directly from the match relation.  
+\item [4.] The initial state of a machine is a single thread with state \Coqcode{Start(main,args)} and a global memory with the global environment allocated. As long as the target program has a a main function (corresponding to the same identifier) and a global environment that is injected from the source one, then the simulation of initial states follows. Both those facts follow from the MOIST simulations in \cref{thm:moistsim}.
+\item [5.] There are two kinds of internal steps: the steps from the thread that is compiling (thread id $ = n$) and and the steps from other threads  (thread id $ \not = n$). 
+The diagram for the compiling thread follows from the the internal diagram of the MOIST simulation  in \cref{thm:moistsim}. The step diagram of the other threads is proven with \cref{thm:selfsim}.  
+\item [6.] The simulation diagram for synchronization steps is exactly \cref{thm:simAdmin}. 
+\item [7.] The simulation diagram for synchronization steps is exactly \cref{thm:simSync}. \qedhere
+\end{enumerate}  \end{proof}
+
+\begin{lemma}[Compile many threads]\label{thm:manythreads} For all  $n\in \nat$,  $\HM_{0}(\text{P},\text{Q}) \gtrsim \HM_{n}(\text{P},\text{Q})$. \end{lemma}
+\begin{proof} By induction on $n$, using the transitive composition from \cref{thm:simcompose} and the stepwise simulation in \cref{thm:COT}.
+\end{proof}
+
+For systems with hard bound on the number of threads, \cref{thm:manythreads} is enough to derive a simulation between source and compiled CPMs. Most real systems have a hard bounds on the number of threads that can be initialized; for example, the number of threads created with \Ccode{ pthread_create}, in Linux, is bounded by the kernel variable \Ccode{pid_max} [reference to pthread\_create manual] %http://man7.org/linux/man-pages/man3/pthread_create.3.html
+which, in 32-bit platforms, is bounded above by $2^{15}$ (for 64-bit architectures the limit is $2^{22}$) [reference to the linux proc manual]%http://man7.org/linux/man-pages/man5/proc.5.html
+. However, we want to prove a simulation with the full generality of \cref{thm:compspechyb} (i.e., supporting infinitely many threads).
+
+
+\begin{proof}[Proof of \cref{thm:compspechyb}] 
+\hypertarget{proof:compspechyb}{The key observation for this proof is that during execution any process has only a finite number of threads. In fact, a process can only spawn one thread per small step so, after $n$ steps, the processes has at most $n$ threads. }
+
+Moreover, with an execution of $n$ steps it is impossible to distinguish between the hybrid machines with hybrid bounds above $n$, $\{\ \HM_i\ |\ i \in \nat + \infty\ ,\  i>n \ \}$. Consequently, we get that for every step of an execution $\HM_{\infty}$ is undistinguishable from infinitely many other machines (namely $\{\ \HM_i\ |\ i>n \ \}$) that are in simulation relation with $\HM_0$.
+
+Let $\succsim_i$ be the match relation for states, given by the simulation $\HM_{0}(\text{P},\text{Q}) \gtrsim \HM_{i}(\text{P},\text{Q})$ (proven in \cref{thm:manythreads}). Also let $|\Sigma |$ be the number of threads in state $\Sigma$. We define a match relation $\succsim_{\infty}$, between states $\Sigma_0$ and $\Sigma_{\infty}$ of  $\HM_0$ and $\HM_{\infty}$, respectively, as follows:
+$$\Sigma_0 \succsim_{\infty} \Sigma_{\infty}\ \   \triangleq \ \  \forall i > |\Sigma_{\infty}|. \ \ \Sigma_0 \succsim_i \Sigma_{\infty}\footnote{The expression $\Sigma_0 \succsim_i \Sigma_{\infty}$ is not well typed;  the state $\Sigma_{\infty}$ is part of the $\HM_{\infty}$, while the right hand side of $\succsim_i$ expects a state of $\HM_i$. However, because $\Sigma_{\infty}$ has less than $i$ threads, there is a state of the right type that is identical to $\Sigma_{\infty}$.} $$
+%$$\begin{array}{ccc}  
+%\Sigma_0 \succsim \Sigma_{\infty} & \triangleq & \forall i > |\Sigma_\infty|.  \\
+% &  & \Sigma_0 \succsim_i \Sigma_\infty  \\
+%  &  & done\end{array}$$
+In other words, $\Sigma_\infty$ can be seen as state of infinitely many finite hybrid machines, each which is in simulation relation with $\HM_{0}(\text{P},\text{Q})$. Then, $\Sigma_\infty$ matches $\Sigma_0$, if they match for all those simulations\footnote{It turns out that, for all $i>|\Sigma_\infty|$, all the relations $\succsim_i$ are equivalent but with different types, so it suffices to just check the smallest one, 
+$\Sigma_0 \succsim_{|\Sigma_{\infty}|} \Sigma_{\infty}$. }. 
+
+Premises 1, 2, 3 and 4 from \cref{def:cpmsim} follow trivially from the definition of $\succsim_\infty$. The simulation diagrams (premises 5,6 and 7), follow from the simulation diagrams of any the simulations $\HM_{0}(\text{P},\text{Q}) \gtrsim \HM_{i}(\text{P},\text{Q})$, for $i>|\Sigma_\infty|$. 
+
+Notice that if the diagram includes spawning a new thread, one of the machines we are considering will take a step that does not match the rest (i.e., $\HM_{|\Sigma_\infty|}(\text{P},\text{Q})$ spawns a thread in Clight). However, because the number of threads has grown, by definition, we don't have to track the machine $\HM_{|\Sigma_\infty|}$ anymore to establish $\succsim_\infty$. 
+\end{proof}
+
+Finally we can establish our proof of Compiler Correctness.
+
+\begin{proof}[Proof of {\hyperref[thm:compspec]{Compiler Correctness}}] This is a direct corollary of \cref{thm:compspechyb}.
+\end{proof}
+
+\subsection{Separate compilation}\label{sec:sepcomp}
+
+We propose that the COAT technique can be exploited in separate compilation to simplify the compiler proofs. In this section we present the structure of the proof, but we leave the implementation detail as future work.
+
+We will consider the linking semantics, from \cite{compcomp}, and define a \emph{Hybrid Linker}, by analogy to our Hybrid Machine, also indexed by a \emph{hybrid bound}, $\text{hb} \in \nat + \infty$.  
+Given a list of modules $S_0,\ S_1, \dots S_{n-1}$ and their compiled versions $T_0,\ T_1, \dots T_{n-1}$, a hybrid linker is given by 
+$\HL \ ((\llbracket S_0 \rrbracket, \llbracket T_0 \rrbracket), %(\llbracket S_1 \rrbracket, \llbracket T_1 \rrbracket), 
+\dots (\llbracket S_{n-1} \rrbracket, \llbracket T_{n-1} \rrbracket)$. Just like the linking semantics, the hybrid linker models the execution of the (``selectively compiled") linked program by maintaining as its
+own state a stack of the modules' core states (i.e. individual instantiations). It also has the following new properties
+\begin{itemize}
+\item It keeps a counter \matht{ec}, for the number of external calls. Every time an external function is called (and a new runtime invocation of a module is created), the counter increases by $1$. The counter never decreases.
+\item When an external function to module $i$ is executed, if $\text{ec} \geq \text{hb}$ then an instance of the funtion in $S_i$ is created, otherwise it uses $T_i$.
+\end{itemize}
+
+We use $\gtrsim$ to denote contextual refinement, as extended to hybrid linkers.
+
+Following the same structure as in \cref{sec:coatproof}, we present the three key results to obtain separate compilation using COAT. In all the following lemmas, we assume the hybrid linkers are all instantiated with the same modules, as described above, and we omit them.
+
+\begin{conjecture}[Compile one core]\label{thm:COC} For all  $n\in \nat$,  $\HL_{n} \gtrsim \HL_{n+1}$. \end{conjecture}
+
+The proof of \cref{thm:COC}, is beyond the scope of this thesis, but it should not be harder than the proof of Compiler refinement in \cite{compcomp}. We expect the proof to be easier and allow significant simplification of structured simulations. 
+
+\begin{lemma}[Compile many cores]\label{thm:manycores} For all  $n\in \nat$,  $n\in \nat$,  $\HL_{0} \gtrsim \HL_{n}$.\end{lemma}
+\begin{proof} By induction on $n$, using the transitive composition of contextual refinement (or structured simulations) and the stepwise simulation in \cref{thm:COC}.
+\end{proof}
+
+
+\begin{theorem}[Compile all cores]\label{thm:allcores} $\HL_{0} \gtrsim \HL_{\infty}$. \end{theorem}
+\begin{proof} Notice that at any point in an execution, the hybrid linker has only instantiated a finite number of new cores (as recored by the counter \matht{ec}). Using \matht{ec} in place of the number of threads, the proof follows in direct analogy to the \hyperlink{proof:compspechyb}{proof of \cref*{thm:compspechyb}}.
+\end{proof}
+
+\begin{corollary}[Separate compilation correctness]\label{thm:sepcomp} 
+If $P_S = S_0, S_1, \dots , S_{N-1}$ is a multimodule program with $N$ translation units compiled to $P_T = T_0, T_1, \dots , T_{N-1}$ 
+(possibly by different compilers) then there is a simulation relation $ \mathcal{L} (S_0, S_1, \dots , S_{N-1}) \gtrsim \mathcal{L} (S_0, S_1, \dots , S_{N-1})$, between the linked source and compiled programs. \end{corollary}
+
+%
+%\subsection{Self simulations}\label{sec:selfsim}
+%When one thread is compiling (using a COAT model), what happens to the other threads? Their code is not changing but the context is, and that might change the memory observable by the thread. For example, if a compiling thread allocates less memory (or more), the other threads will see locations in memory change, even their own allocations.\footnote{CompCert's memory model allocates blocks in order, so the block numbers are not preserved by interference of other allocations. However, the memory structure is preserved up to the memory injection.} We must prove that the behavior of threads that don't compile is preserved, under the compilation of other threads. This preservation of behavior is even stronger than the one preserved by the compiler. For example, we can expect that threads that don't compile allocate the same number of blocks in the same order (even if the block numbers change). We formalize this, strong preservation of behavior under changes to the context as \emph{self simulation}.
+%
+%\begin{definition}
+%We say that a language \matht{L} \emph{simulates itself} if there is an \emph{injection relation} between it's states and indexed by a memory injection, such that:
+%\begin{itemize}
+%\item States related by the injection relation take steps that have equivalent (up to memory injection) effects on memory and preserve the injection relation,
+%\item The injection relation preserves \Coqcode{at_external}, and
+%\item The injection relation is monotonic on the memory injection.
+%\end{itemize}
+%
+%\end{definition}
+%
+%We prove in Coq that Clight and Assembly self simulate.
+%
+%\begin{lemma}\label{thm:selfsim} Clight and X86 assembly self simulate. \end{lemma}
+%
+%%\subsection{Compile one thread}\label{sec:COT}
+%
+%\subsection{Simulations for administrative steps}\label{sec:simadmin}
+%
+%The administrative steps of a CPM (namely \textsc{resume, suspend} and \textsc{stutter}) are the simplest of ones. They don't change the memory, the thread permissions or the locks. They also leave the thread states mostly unchanged, only modifying the marker (e.g., changing \Coqcode{Blocked} to \Coqcode{Run}). The only difficulty, which we solve in this section, is that the  \textsc{resume} step has to turn the thread-local state from a call state, to a return state by calling $\mathrm{afterExternal}(\sigma,v)=\sigma'$ (as it is returning from a synchronization function call). 
+%
+%First, why isn't \Coqcode{afterExternal} called when the synchronization function is executed? That's because other threads interfere with the memory between the execution of the synchronization function and the \textsc{resume} step and we want to model all of that behavior as part of the external function. However, at the time the synchronization function executes, we already know how to reestablish the state. Our strategy, detailed in the proof of \cref{thm:simAdmin}, is to prove the diagram for the \textsc{resume} step when the function is executed and recore that fact in the match relation.
+%
+%We start by presenting the match relation for marked states (i.e. with \Coqcode{Blocked} $\cdot$, \Coqcode{Run} $\cdot$ and \Coqcode{Resume} $\cdot$). For Blocked states, it records the interference of other threads, and for Resume states, it promises to reestablish the match relation, after future interference.
+%
+%\begin{definition}\label{def:matchmarkedstates}
+%Let $\succsim$ be a match relation between states of some languages $L_1$ and $L_2$. We extend the relation to marked states as follows:
+%\begin{enumerate}[(a)]
+%\item If two states match, so do their running version $ \sigma_1 \sim \sigma_2 \rightarrow \text{Run } \sigma_1 \succsim \text{Run } \sigma_2$
+%\item If two states match and some threads interfere with the memory, the blocked states still match. 
+%\item Two \Coqcode{Resume} states match if for every possible interference of other threads with the memory, we can reestablish a match relation with the resulting states. 
+%\end{enumerate}
+%\end{definition}
+%
+%Now the definition of match relation for \Coqcode{Resume} states bakes in the step simulation relaiton, which now makes the lemma below easy to prove. The definition above shifts the burden of prove to the execution of the synchronization functions (which we consider in \cref{sec:simSync}).
+%
+% \begin{figure}\centering
+% 
+%$$\exists\ \Sigma_2'\ j', j \sqsubseteq j' $$
+%\begin{tikzcd}[column sep=tiny]
+%\Sigma_1 \arrow[d, "\text{admin}"']
+%& \succsim_j & \Sigma_2 \arrow[d, dotted, "\text{admin}"] \\
+%\Sigma_1' & \succsim_{j'} & \Sigma_2'
+%\end{tikzcd} 
+%
+%\caption[CPM administrative step diagrams]{CPM administrative step diagrams stated in \cref{thm:simAdmin}}\label{figure:admitstepdiag}
+%\end{figure}
+%
+%\begin{lemma}\label{thm:simAdmin}
+%Let there be two CPM states, $\Sigma_1$ and $\Sigma_2$, in a match relation $\Sigma_1 \succsim_j \Sigma_2$ (as defined in \cref{def:CPMmatch}, with \cref{def:matchmarkedstates}). If $\Sigma_1$ takes an administrative step to some $\Sigma_1'$, then $\Sigma_2$ takes the same administrative step to some $\Sigma_2'$ such that the match relation can be reestablished for a larger injection $\Sigma_1' \succsim_{j'} \Sigma_2'$   (as depicted in \cref{figure:admitstepdiag}).
+%\end{lemma}
+%
+%\begin{proof}
+%We look at each step individually
+%\begin{enumerate}[r]
+%\item[\textsc{stutter}] This step is trivial and the simulation is trivial as well. 
+%\item[\textsc{suspend}] This is trivial and the simulation is easily constructed. To reestablish the match relation after changing the the states to \Coqcode{Blocked} $\cdot$, we provide an empty interference (case (b) in \cref{def:matchmarkedstates}). 
+%\item[\textsc{resume}] This simulation diagram follows directly from the match relation. After the \textsc{resume} step, the new states are marked with \Coqcode{Run}, so the new simulation is easy to establish (case (a) in \cref{def:matchmarkedstates}). 
+%
+%It's worth noting that for this step we are using the (c) case in \cref{def:matchmarkedstates}, which is established when the synchronization function is executed, as we show in \cref{thm:simSync}. \qedhere
+%\end{enumerate}
+%\end{proof}
+%
+%
+%
+%\subsection{Simulations for synchronizations}\label{sec:simSync}
+%
+%
+%\begin{fnlemma}{The coq implementation is presented in \cref{coq:syncdiagramCPM}}\label{thm:simSync}
+%Let there be two CPM states, $\Sigma_1$ and $\Sigma_2$, in a match relation $\Sigma_1 \succsim_j \Sigma_2$ (as defined in \cref{def:CPMmatch}, with \cref{def:matchmarkedstates}). If $\Sigma_1$ takes a synchronization step to some $\Sigma_1'$, then $\Sigma_2$ takes the same synchronization step to some $\Sigma_2'$, transferring equivalent permissions (if any)  and such that the match relation can be reestablished for a larger injection $\Sigma_1' \succsim_{j'} \Sigma_2'$.
+%\end{fnlemma}

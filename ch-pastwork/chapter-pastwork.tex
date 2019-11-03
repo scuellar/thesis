@@ -1,9 +1,25 @@
 
 \chapter{Related Work\label{ch:relatedwork}}
 
-Here I talk about related work:
+In this section we review related work, paying special attention to the developments that bear technical similarities to ours. 
+
+Boehm wrote ``Threads cannot be implemented as a library,''
+\cite{boehm05}
+explaining that many compilers did optimizations that were unsafe
+for concurrency. He argued that better language specifications
+were needed.  This motivated our work.
+Our new result shows that CompCert's specification
+(with our improvements relating to permissions and events)
+\emph{does} permit threads to be implemented
+``as a library'', in the sense that it decouples the
+compiler-correctness proof from the thread-library correctness
+proof.
+
+
 
 % include other files for sections of this chapter. These use the 'input' command since each section within a chapter should not start a new page.
 % If you want to swap the order of sections, it is as simple as reversing the order you include them.
-\input{ch-pastwork/topic1}
+\input{ch-pastwork/pastwork-concurmodel}
+\input{ch-pastwork/pastwork-compcertsem}
+\input{ch-pastwork/pastwork-concurcompiler}
 

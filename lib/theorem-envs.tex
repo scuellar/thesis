@@ -1,7 +1,70 @@
-
+\RequirePackage{aliascnt,amsthm}
 
  %% Environments for definitions theorems
 \newtheorem{theorem}{Theorem}[section] %restarts every section
 \newtheorem{corollary}[theorem]{Corollary} %same counter as theorems
 \newtheorem{lemma}[theorem]{Lemma} %same counter as theorems
-\newtheorem{definition}{Definition} %same counter as theorems
+\newtheorem{definition}[theorem]{Definition} %same counter as theorems
+\newtheorem{remark}[theorem]{Remark} %same counter as theorems
+
+\newtheorem{conjecture}[theorem]{Conjecture} %Conjectures.
+\newtheorem{claim}[theorem]{Claim} %Conjectures.
+
+
+%%%% Definition to repeat definitions for theorem
+\makeatletter %Allows to call commands with @
+\newtheorem*{rep@theorem}{\rep@title}
+\newcommand{\newreptheorem}[2]{%
+\newenvironment{rep#1}[1]{%
+ \def\rep@title{#2 \ref{##1}}%
+ \begin{rep@theorem}}%
+ {\end{rep@theorem}}}
+\makeatother %reverts @ into a special character not usable in command names.
+
+%To repeat theorems:
+\newreptheorem{theorem}{Theorem}
+\newreptheorem{lemma}{lemma}
+
+%%USAGE:
+%\begin{reptheorem}{mainthm}[Informal Main Theorem]
+%That theorem again
+%\end{reptheorem}
+%
+%\begin{theorem}
+%\label{mainthm}
+%A theorem
+%\end{theorem}
+%\begin{lemma}
+%\label{anInsignificantLemma}
+%A lemma
+%\end{lemma}
+%
+%\begin{replemma}{anInsignificantLemma}
+%That theorem again
+%\end{replemma}
+
+
+
+%%%%%%%%Environments with footnotes
+
+\makeatletter
+\newenvironment{fnlemma}[1]
+{\begingroup
+\apptocmd{\thetheorem}{\unless\ifx\protect\@unexpandable@protect\protect\footnote{#1}\fi}{}{}
+\begin{lemma}
+}
+{
+\end{lemma}
+\endgroup}
+\makeatother
+
+\makeatletter
+\newenvironment{fndefinition}[1]
+{\begingroup
+\apptocmd{\thetheorem}{\unless\ifx\protect\@unexpandable@protect\protect\footnote{#1}\fi}{}{}
+\begin{definition}
+}
+{
+\end{definition}
+\endgroup}
+\makeatother

@@ -1,8 +1,16 @@
-\section{Conjunctive Semantics}\label{sec:compcert-sem}
+\section{MOIST Semantics }\label{sec:compcert-sem}
 
-As described in the introduction, we need more expressive semantics to distinguish the current memory, during program execution, and the points where external functions are called. We call this expanded semantics \emph{conjunctive semantics} and it extends CompCert semantics with the following
+As described in the introduction, we need more expressive semantics to distinguish the current memory, during program execution, and the points where external functions are called. We call this expanded semantics \emph{MOIST semantics} (just like our simulations) and it extends CompCert semantics with the following:
 
-\begin{table}
+
+\begin{itemize}
+\item Memory: \Coqcode{get_mem}: The state of every language in CompCert can be interpreted as a pair of a \emph{core} and a memory \cite{bsda:esop2014} and \Coqcode{get_mem} is the projection that returns the memory inside the state. % and \Coqcode{set_mem} installs a new memory in the state.
+\item  Observable: \Coqcode{at_external} : This function exposes when a program is about to call an external function and it returns the function and the arguments being passed. The instantiation for Clight is shown in \autoref{code:atxClight}.
+\item Injectable: It uses the injectable traces described in \autoref{sec:memevents}.
+\item Startable: \Coqcode{entry_point}: This is a generalization of \Coqcode{initial_state}, as described in \autoref{sec:premain}.
+\end{itemize}    
+
+\begin{figure}
 \begin{lstlisting}
 Definition at_external (c: state) : option (external_function * list val) :=
   match c with
@@ -14,19 +22,14 @@ Definition at_external (c: state) : option (external_function * list val) :=
   | _ => None
  end.
 \end{lstlisting}
-\caption{\Coqcode{at_external} definition for Clight. The function checks that 
+\caption[\Coqcode{at_external} definition for Clight]{\Coqcode{at_external} definition for Clight. The function checks that 
 (1) the current state is about to make a function call, 
 (2) that the function is an External function and, 
 (3) that the external function cannot be inlined (The compiler is allowed to inline specific functions such as \Ccode{memcpy} and certain builtins). }\label{code:atxClight}
-\end{table}
+\end{figure}
 
 
-\begin{itemize}
-\item \Coqcode{get_mem} and \Coqcode{set_mem}: The state of every language in CompCert can be interpreted as a pair of a \emph{core} and a memory \cite{compcomp}. \Coqcode{get_mem} is the projection that returns the memory inside the state and \Coqcode{set_mem} changes the memory.
-\item \Coqcode{entry_points}: This is a generalization of \Coqcode{initial_state}, as described in section \ref{sec:premain}.
-\item  \Coqcode{at_external} : This function exposes when a program is about to call an external function and it returns the function and the arguments being passed. The instantiation for Clight is shown in table \ref{code:atxClight}.
-\end{itemize}    
+Our semantics is very closely related to \emph{interaction semantics} \cite{compcomp} with two main differences. First, we don't need to define \Coqcode{after_external} for every language. We only define it for Clight and Assembly, the languages that show up in the specification. In those languages, we prove that we can replace the one-step CompCert external function calls with the small step execution of that function, using \Coqcode{at_external} and \Coqcode{after_external}; therfore, there is no need for the compiler or the intermediate languages to know about \Coqcode{after_external}.
+Second, we allow states that are \Coqcode{at_external} to take a step in the CompCert semantics; namely, the execution will continue by calling the external function. The CompCert semantics, in this case, represents the \emph{thread-local} view (or \emph{module-local}) , where external functions, other threads and modules are abstracted into oracles that execute in one step.\footnote{In CompCert the oracle, called \Coqcode{external_functions_sem}, is passed as a parameter to the correctness proof and gives the semantic of external functions.}. 
 
-Our conjunctive semantics is very closely related to \emph{interaction semantics} \cite{compcomp} with two main differences. First, we don't need to define \Coqcode{after_external} for every language. Second, states that are \Coqcode{at_external} can take a step in the CompCert semantics; namely, the execution will continue by calling the external function. The CompCert semantics, in this case, represents the \emph{thread-local} view (or \emph{module-local}) , where external functions, other threads and modules are abstracted into oracles that execute in one step.\footnote{In CompCert the oracle, called \Coqcode{external_functions_sem}, is passed as a parameter to the correctness proof and gives the semantic of external functions.}. 
-
-In fact, given a conjunctive semantics we can derive an interaction semantics, if only we define \Coqcode{after_external}. The step relation is constructed by removing steps from states that make external function calls, as described by \Coqcode{at_external}. 
+In fact, given a Startable factorable-state semantics semantics we can derive an interaction semantics, if only we define \Coqcode{after_external}. The step relation is constructed by removing steps from states that make external function calls, as described by \Coqcode{at_external}. We use this feature to define interaction semantics for Clight and Assembly, as shown in \autoref{ch:compiler}. 

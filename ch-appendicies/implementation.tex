@@ -1,6 +1,247 @@
 \chapter{Implementation Details\label{ch:implementation}}
+%To add latex comments:
 
-Implementation details.
+\lstset{numbers=left, stepnumber=1, firstnumber=last}
+This appendix contains the Coq implementation of a selected number of definitions, lemmas and proofs. It is intended as a companion for both the thesis (to fill in implementation details that are intersttin to the reader) and to the Coq code (to have more complete explanation of the code, than what fits in code comments).  The pieces of code are organized by the chapters as they are defined in the Thesis.  
+
+\section{Useful definitions}\label{sec:usefuldefs}
+\subsubsection{Contains Thread}
+We say that a CPM contains a thread $i$, if its number of threads is lower than the thread index $i$. Using this predicate is particularly useful since it allows us to avoid having option types, for every function that gets permission maps (i.e. $\vec{\pi}[i]$), or states (i.e. $\vec{s}[i]$) from the CPM state. We use the notation $i \in \text{tp}$ to say  \Coqcode{containsThread tp i}. 
+We will use the notation 
+\begin{lstlisting}[firstnumber=1]
+Definition containsThread (tp : cpm) (i : tid) : Prop  :=   i < num_threads tp.
+\end{lstlisting}
+
+\subsubsection{Mem compatible}
+We carry a notion of compatibility with memory ensuring that memories restricted to some permission map ($\setcur{m}{\pi}$) are well formed.   
+\begin{lstlisting}[firstnumber=1]
+Record mem_compatible (tp : cpm) (m : mem) : Prop := 
+\end{lstlisting}     
+\noindent Well formed memories must satisfy that the current permissions are at most the max permissions. We require that the permission of each thread is lower than the max permissions in the memory. 
+\begin{lstlisting}	
+  { compat_th : forall (i : nat) (cnt : i $\in$ tp),
+                permMapLt (getThreadR cnt).1 (getMaxPerm m) /\
+                permMapLt (getThreadR cnt).1 (getMaxPerm m);
+\end{lstlisting}     
+\noindent Similarly, we require that the permission of each lock is lower than the max permissions in the memory. 
+\begin{lstlisting}	
+    compat_lp : forall (l : address) (pmaps : permission_map),
+                ThreadPool.lockRes tp l = Some pmaps ->
+                permMapLt pmaps.1 (getMaxPerm m) /\ 
+                permMapLt pmaps.2 (getMaxPerm m);
+\end{lstlisting}     
+\noindent All locations noted as a lock by the lock pool $L$, must have been allocated in the memory (i.e., lower than \Coqcode{nextblock}) 
+\begin{lstlisting}	
+    lockRes_blocks : forall (l : address) (rmap : permission_map),
+                     lockRes tp l = Some rmap -> valid_block m (fst l) }
+\end{lstlisting}
 
 \section{CPM design}
 \label{sec:implementation:cmpdesign}
+\subsection{Formal definition of the CPM}
+\label{sec:implementation:cmpformaldesign}
+\subsubsection{Permission coherence}
+
+The definition of Coherence is described in \cref{sec:cpmdefs} and the full code can be found in \emph{VST/concurrency/common/HybridMachine.v} in line 91. We use the notation $\in$, to mean \Coqcode{containsThread}, defined above in \cref{sec:usefuldefs}. 
+We use the predicate \Coqcode{permMapsDisjoint2}, which says that two permissions are not competing (\cref{def:comp-perm}) and 
+\Coqcode{lock_coherence} which says the permissions are data-lock coherent (\cref{def:data-lock}).
+The definition of coherence, is an invariant preserved by the execution of CPMs, so we call it \Coqcode{invariant}: 
+\begin{lstlisting}[firstnumber=1]
+    Record invariant (tp: thread_pool) :=
+\end{lstlisting}     
+\noindent The permissions of any two threads (both permissions $\pi_1$ and $\pi_2$), are not competing 
+\begin{lstlisting}	
+      { no_race_thr : forall i j (cnti: i $\in$  tp) (cntj: j $\in$ tp) (Hneq: i <> j),
+            permMapsDisjoint2 (getThreadR cnti)  (getThreadR cntj); 
+\end{lstlisting}     
+\noindent  The permissions protected by any two unlocked locks are not competing 
+\begin{lstlisting}
+        no_race_locks:
+          forall laddr1 laddr2 rmap1 rmap2
+            (Hneq: laddr1 <> laddr2)
+            (Hres1: lockRes tp laddr1 = Some rmap1)
+            (Hres2: lockRes tp laddr2 = Some rmap2),
+            permMapsDisjoint2 rmap1 rmap2; 
+\end{lstlisting}     
+\noindent The of permissions any thread and that of am unlocked lock are not competing 
+\begin{lstlisting}
+        no_race_locks_thr:  forall i laddr (cnti: i $\in$ tp) rmap
+            (Hres: lockRes tp laddr = Some rmap), 
+            permMapsDisjoint2 (getThreadR cnti) rmap;
+\end{lstlisting}     
+\noindent For a thread, the locations it sees as regular location (i.e., have nonempty permissions in  $\pi_1$) are not seen as locks by it's or the permissions in locks  
+\begin{lstlisting}
+        thread_data_lock_coh: forall i j (cnti: i $\in$ tp) (cntj: i $\in$ tp),
+                lock_coherence (getThreadR cntj).1 (getThreadR cnti).2) /\
+            (forall laddr rmap, lockRes tp laddr = Some rmap ->
+                lock_coherence rmap.1 (getThreadR cnti).2);
+\end{lstlisting}     
+\noindent For an unlocked lock, the locations it sees as regular location (i.e., have nonempty permissions in  $\pi_1$) are not seen as locks by any other thread or any other lock  
+\begin{lstlisting}
+        locks_data_lock_coh: forall laddr rmap (Hres: lockRes tp laddr = Some rmap),
+            (forall j (cntj: j $\in$ tp), lock_coherence (getThreadR cntj).1 rmap.2) /\
+            (forall laddr' rmap', lockRes tp laddr' = Some rmap' ->
+                lock_coherence rmap'.1 rmap.2);
+\end{lstlisting}     
+\noindent Finally, and this is a small technical detail, for every lock created we protect a number of addresses that can't be written. This simulates some libraries, such as Pthreads that store more information in a lock than just its state. The definition is parametric on the size of the locks and for a lock of size 1, the following proposition is trivial. \Coqcode{lr_valid} protects the lock, by ensuring that all the permissions are empty for the parts of the lock that don't contain the state (and thus should only be accessed by the library).
+\begin{lstlisting}
+        lockRes_valid: lr_valid (lockRes tp)}.
+\end{lstlisting}	
+%\caption[Permission coherence]{Permission coherence: found at VST/concurrency/common/HybridMachine.v} \label{coq:matchstateCPM}
+%\end{figure}
+
+\section{Compiler correctness}
+\label{sec:implementation:compiler}
+
+\subsection{COAT proof of compiler correctness}
+\label{sec:implementation:COATproof}
+
+\subsubsection{Match relation for Hybrid Machine states.}\label{coq:matchstateCPM}
+We explain the Coq code for the match relation, $\succsim$, of Hybrid Machine states as defined in \cref{def:CPMmatch}. The full code can be found in \emph{VST/concurrency/compiler/concur\_match.v}. The relation takes  
+a hybrid bound $hb$, 
+a well-founded measure $\text{ocs}$, 
+a memory injection $j$, 
+two memories $m_1$, $m_2$, 
+and the rest of the  states of each \Coqcode{cstate1} and \Coqcode{cstate2}. 
+
+\begin{lstlisting}[firstnumber=1]
+      Record concur_match hb (ocd: option compiler_index)(j:meminj)
+              (cstate1: $HM_{\text{hb}}$) (m1: mem) 
+              (cstate2: $HM_{\text{hb}+1}$) (m2: mem):=
+\end{lstlisting}     
+\noindent The states have the same number of threads
+\begin{lstlisting}
+        { same_length: num_threads cstate1 = num_threads cstate2
+\end{lstlisting}     
+\noindent As explained in \cref{sec:fullinjections}, we currently require that injections are full. This will be addressed in future work.
+\begin{lstlisting}
+          ; full_inj: Events.injection_full j m1 (* remove this when we prove permission transfer is preserved*)
+\end{lstlisting}     
+\noindent Both states are compatible with the memory. The definition of \Coqcode{mem_compatible} is explained in \cref{sec:usefuldefs}
+\begin{lstlisting}
+          ; memcompat1: mem_compatible cstate1 m1
+          ; memcompat2: mem_compatible cstate2 m2
+\end{lstlisting}     
+\noindent Each thread's lock permissions $\pi_2$ is mapped in the following sense: if the thread has some (non-empty) permissions in the target ($\Sigma_2$) then in the source ($\Sigma_1$) the same thread has the same permission in the same location (up to injection).
+\begin{lstlisting}
+          ; lock_perm_preimage:
+              forall i (cnt1: i $\in$ cstate1) (cnt2: i $\in$  cstate2),
+                perm_surj j (lock_perms cnt1) (lock_perms  cnt2)
+\end{lstlisting}     
+\noindent For each thread, the memories restricted to the thread's permissions inject: $\setcur{m_1}{\pi^1_{1,i}} \injarrow{j} \setcur{m_2}{\pi^2_{2,i}}$. The extra arguments \Coqcode{Hlt1 Hlt2} ensure that the memories, restricted to the thread's permissions are well formed. Both arguments can be derived from the memory compatibility described above 
+\begin{lstlisting}
+          ; INJ_threads:
+              forall i (cnt1: i $\in$ cstate1) (cnt2: i $\in$  cstate2) Hlt1 Hlt2,
+                Mem.inject j (@restrPermMap (getThreadR cnt1).1 m1 Hlt1)
+                            (@restrPermMap (getThreadR cnt2).1 m2 Hlt2)
+\end{lstlisting}     
+\noindent Similarly, for each thread, the memories restricted to the thread's lock permissions inject, $\setcur{m_1}{\pi^2_{1,i}} \injarrow{j} \setcur{m_2}{\pi^2_{2,i}}$. 
+\begin{lstlisting}
+          ; INJ_locks:
+              forall i (cnt1: i $\in$ cstate1) (cnt2: i $\in$  cstate2) Hlt1 Hlt2,
+                Mem.inject j (@restrPermMap (getThreadR cnt1).2 m1 Hlt1)
+                            (@restrPermMap (getThreadR cnt2).2 m2 Hlt2)
+\end{lstlisting}     
+\noindent Also, for each lock, the memories restricted to the lock permissions inject (notice the locks are not the same address, but are related by the injection).
+\begin{lstlisting}
+          ; INJ_lock_permissions:
+              forall b b' delt opt_rmap,
+                j b = Some (b', delt) ->
+                forall ofs, lockRes cstate1 (b, unsigned ofs) = opt_rmap ->
+                       lockRes cstate2 (b', unsigned (add ofs (repr delt))) =
+                       (option_map (virtueLP_inject m2 j) opt_rmap)
+\end{lstlisting}     
+\noindent And all locks are injected.
+\begin{lstlisting}
+          ; INJ_lock_content:
+              forall b ofs rmap,
+                lockRes cstate1 (b, ofs) = Some rmap ->
+                inject_lock j b ofs m1 m2    
+\end{lstlisting}     
+\noindent Both states are coherent, as defined in \cref{sec:implementation:cmpformaldesign} (code explained above in \cref{sec:implementation:cmpformaldesign}) .
+\begin{lstlisting}
+          ; source_invariant: invariant cstate1    
+          ; target_invariant: invariant cstate2
+\end{lstlisting}     
+\noindent Finally, all threads are in a match relation from source to target. For $i>\text{hb}$ we use the match relation for Clight given by the self simulation by \cref{thm:selfsim} and, 
+similarly, for $i<\text{hb}$ we use the match relation for Assmebly given in \cref{thm:selfsim}. For $i=\text{hb}$, we use the match  relation given by the MOIST simulation of CompCert 
+\begin{lstlisting}
+          ; mtch_source: forall (i:nat), (i > hb) -> %nat ->
+                forall  (cnt1: i $\in$ cstate1) (cnt2: i $\in$ cstate2) Hlt1 Hlt2,
+                  match_thread_source j (getThreadC cnt1)
+				     (@restrPermMap (getThreadR cnt1).1 m1 Hlt1)
+				     (getThreadC cnt2)
+				     (@restrPermMap (getThreadR cnt2).1 m2 Hlt2)
+          ; mtch_target:
+              forall (i:nat), (i < hb) -> %nat ->
+                forall  (cnt1: i $\in$ cstate1) (cnt2: i $\in$ cstate2) Hlt1 Hlt2,
+                  match_thread_target j (getThreadC cnt1)
+				     (@restrPermMap (getThreadR cnt1).1 m1 Hlt1)
+				     (getThreadC cnt2)
+				     (@restrPermMap (getThreadR cnt2).1 m2 Hlt2)       
+	; mtch_compiled:
+              forall (i:nat),  (i = hb) -> %nat ->
+                forall  (cnt1: i $\in$ cstate1) (cnt2: i $\in$ cstate2) Hlt1 Hlt2,
+                  match_thread_compiled ocd j (getThreadC cnt1)
+				     (@restrPermMap (getThreadR cnt1).1 m1 Hlt1)
+				     (getThreadC cnt2)
+				     (@restrPermMap (getThreadR cnt2).1 m2 Hlt2) }.
+\end{lstlisting}	
+%\caption[Match state relation for CPMs]{Match state relation for CPMs: found at VST/concurrency/compiler/concur\_match.v} \label{coq:matchstateCPM}
+%\end{figure}
+
+
+\subsection{Simulations for synchronizations}\label{code:syncsim}
+\subsubsection{Diagram for synchronization steps}
+We present bellow the Coq specification of a diagram for synchronization steps, as defined in \cref{thm:simSync}. Notice that we separate the memory from the rest of the CPM state in the implementation:
+%\begin{figure}
+\begin{lstlisting}[firstnumber=1]
+      Lemma external_step_diagram:
+        forall (U : schedule) (cd : option compiler_index)(j : meminj)
+          (st1 : cpm)(m1 : mem)(st1' : cpm)(m1' : mem) (st2 : cpm) (m2 : mem)
+          (ev1 : sync_event),
+\end{lstlisting}     
+\noindent The initial states are in a match relation,  $(\text{st}_1, m_1) \succsim_{j} (\text{st}_2, m_2)$. 
+The condition \Coqcode{Hcmpt} is redundant with the match relation, but we use it to construct the well formed memories. 
+\begin{lstlisting}
+          forall  (Hcmpt : mem_compatible st1 m1),
+          concur_match cd j st1 m1 st2 m2 ->
+\end{lstlisting}     
+\noindent The thread $i$ is at the top of the shedule  
+\begin{lstlisting}
+          forall (i:tid)  (cnt1 : i $\in$ st1),
+            schedPeek U = Some i ->
+\end{lstlisting}     
+\noindent The thread $i$ can take a synchronization step $\Psi,\Phi \vdash_\mathrm{HM} 
+\left<i\cdot\mho, \text{st}_1, m_1 \right>
+\!\!\stackrel{\mathrm{ev}_1}\mapsto\!\!
+\left<\mho, \text{st}_1', m_1' \right>$
+\begin{lstlisting}
+            syncStep true cnt1 Hcmpt st1' m1' ev1 ->
+\end{lstlisting}     
+\noindent Then we can construct, in the target HM, a new event $\text{ev}_2$, a new state $\text{st}_2'$, measure cd and memory injection $j$.
+\begin{lstlisting}
+            exists ev2 (st2' : cpm) (m2' : mem) (cd' : option compiler_index) (j' : meminj),
+\end{lstlisting}     
+\noindent The new states are in a match relation $(\text{st}_1', m_1') \succsim_{j} (\text{st}_2', m_2')$. 
+\begin{lstlisting}
+              concur_match cd' j' st1' m1' st2' m2' /\
+\end{lstlisting}     
+\noindent the produced events inject, $\text{ev}_1 \strinjarrow{j} \text{ev}_2$,
+\begin{lstlisting}
+              inject_mevent j' (external i ev1) (external i ev2) /\
+\end{lstlisting}     
+\noindent Finally, the target machine can take a synchronization step 
+$\Psi,\Phi \vdash_\mathrm{HM} 
+\left<i\cdot\mho, \text{st}_2, m_2 \right>
+\!\!\stackrel{\mathrm{ev}_2}\mapsto\!\!
+\left<\mho, \text{st}_2', m_2' \right>$
+\begin{lstlisting}
+              external_step U st2 m2 (schedSkip U)
+                (external i ev2) st2' m2'.
+\end{lstlisting}	
+%\caption[Machine step diagrams for CPMs]{Machine step diagrams for CPMs: found at VST/concurrency/compiler/synchronisation\_syjlations.v} \label{coq:syncdiagramCPM}
+%\end{figure}
+
+\subsubsection{Simulation of the \Ccode{Acquire} step}
+

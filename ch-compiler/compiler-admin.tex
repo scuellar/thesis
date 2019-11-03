@@ -1,0 +1,48 @@
+\section{Simulations for administrative steps}\label{sec:simadmin}
+
+The administrative steps of a CPM (namely \textsc{resume, suspend} and \textsc{stutter}) are the simplest ones. They don't change the memory, the thread permissions, or the locks. They also leave the thread states mostly unchanged, only modifying the marker (e.g., changing \Coqcode{Blocked} to \Coqcode{Run}). The only difficulty, which we solve in this section, is that the  \textsc{resume} step has to turn the thread-local state from a call state, to a return state by calling $\mathrm{afterExternal}(\sigma,v)=\sigma'$ (as it is returning from a synchronization function call). 
+
+First, why isn't \Coqcode{afterExternal} called when the synchronization function is executed? That's because other threads interfere with the memory between the execution of the synchronization function and the \textsc{resume} step and we want to model all of that behavior as part of the external function. However, at the time the synchronization function executes, we already know how to reestablish the state. Our strategy, detailed in the proof of \cref{thm:simAdmin}, is to prove the diagram for the \textsc{resume} step when the function is executed and record that fact in the match relation.
+
+We start by presenting the match relation for marked states (i.e. with \Coqcode{Blocked} $\cdot$, \Coqcode{Run} $\cdot$ and \Coqcode{Resume} $\cdot$). For Blocked states it records the interference of other threads, and for Resume states it promises to reestablish the match relation after future interference.
+
+\begin{definition}\label{def:matchmarkedstates}
+Let $\sim$ be a match relation between states of some languages $L_1$ and $L_2$. We extend the relation to marked states as follows:
+\begin{enumerate}
+\item[\matht{Init:}] For any function $f$ and arguments $a_1$ and $a_2$ such that $a_1 \strinjarrow{j} a_2$, then  ${Run }\ (f,\ a_1) \sim_j {Run}\ (f,\ a_2)$
+\item[\matht{Run:}] If two states match, so do their running version $ \sigma_1 \succsim \sigma_2 \rightarrow \text{Run } \sigma_1 \succsim \text{Run } \sigma_2$
+\item[\matht{Resume:}] If two states match and some threads interfere with the memory, the blocked states still match. 
+\item[\matht{Resume:}]  Two \Coqcode{Resume} states match if for every possible interference of other threads with the memory, we can reestablish a match relation with the resulting states. 
+\end{enumerate}
+\end{definition}
+
+Now the definition of match relation for \Coqcode{Resume} states bakes in the step simulation relation, which now makes the lemma below easy to prove. The definition above shifts the burden of proof to the execution of the synchronization functions (which we consider in \cref{sec:simSync}).
+
+ \begin{figure}\centering
+ 
+$$\exists\ \Sigma_2'\ j', j \sqsubseteq j' $$
+\begin{tikzcd}[column sep=tiny]
+\Sigma_1 \arrow[d, "\text{admin}"']
+& \succsim_j & \Sigma_2 \arrow[d, dotted, "\text{admin}"] \\
+\Sigma_1' & \succsim_{j'} & \Sigma_2'
+\end{tikzcd} 
+
+\caption[CPM administrative step diagrams]{CPM administrative step diagrams stated in \cref{thm:simAdmin}}\label{figure:admitstepdiag}
+\end{figure}
+
+\begin{lemma}\label{thm:simAdmin}
+For two hybrid machines with consecutive hybrid bounds ( $\text{hb}_2 = \text{hb}_1 +1$) the administrative steps form a simulation diagram in lockstep, as depicted in \cref{figure:admitstepdiag}.
+%   
+%Let there be two CPM states, $\Sigma_1$ and $\Sigma_2$, in a match relation $\Sigma_1 \succsim_j \Sigma_2$ (as defined in \cref{def:CPMmatch}, with \cref{def:matchmarkedstates}). If $\Sigma_1$ takes an administrative step to some $\Sigma_1'$, then $\Sigma_2$ takes the same administrative step to some $\Sigma_2'$ such that the match relation can be reestablished for a larger injection $\Sigma_1' \succsim_{j'} \Sigma_2'$   (as depicted in \cref{figure:admitstepdiag}).
+\end{lemma}
+
+\begin{proof}
+We look at each step individually
+\begin{enumerate}[r]
+\item[\textsc{stutter}] This step is trivial and the simulation is trivial as well. 
+\item[\textsc{suspend}] This is trivial and the simulation is easily constructed. To reestablish the match relation after changing the the states to \Coqcode{Blocked} $\cdot$, we provide an empty interference (case (b) in \cref{def:matchmarkedstates}). 
+\item[\textsc{resume}] This simulation diagram follows directly from the match relation. After the \textsc{resume} step, the new states are marked with \Coqcode{Run}, so the new simulation is easy to establish (case (a) in \cref{def:matchmarkedstates}). 
+
+It's worth noting that for this step we are using the (c) case in \cref{def:matchmarkedstates}, which is established when the synchronization function is executed, as we show in \cref{thm:simSync}. \qedhere
+\end{enumerate}
+\end{proof}

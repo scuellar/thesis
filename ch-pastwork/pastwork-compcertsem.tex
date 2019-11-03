@@ -1,0 +1,79 @@
+\section{Compiler specification}
+\label{sec:copmilerspec}
+
+%%MEMORY
+\subsection*{Interaction semantics and Logical Simulation Relations}
+
+Originally, CompCert-compiled programs could not share memory (especially pointer-containing memory) with
+their contexts (such as system-calls to the O.S. or a hypothetical concurrency library)---the CompCert correctness specification/proof
+was too weak.  To improve the compiler's specification, Beringer
+\emph{et al.} introduced \emph{Interaction Semantics}
+\cite{bsda:esop2014}, reformulating CompCert's operational semantics
+to permit shared-memory interaction.  This was powerful enough to
+characterize system calls that read or write the process's memory,
+and was a step towards shared-memory concurrency.
+
+\begin{table}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{|c|cc >{\bfseries}c|cc >{\bfseries}c|}
+\hline
+ & \compcert\ 2.1 & CompComp & Added & \compcert\ 3.2 & Our work & Added  \\
+\hline
+Cminorgen & 2796 & 5018 & 52\% & 2261 & 2431 & 7\% \\
+RTLgen & 1475 & 4883 & 156\% & 1593 & 1690 & 6\% \\
+Tailcall & 628 & 1769 & 125\% & 608 & 705 & 16\% \\
+Stacking & 2906 & 6657 & 130\% & 2907 & 2964 & 2\% \\
+\hline
+\end{tabular}
+}
+\caption[Changes to CompCert for CompComp]{Comparing lines of code for selected compiler passes in CompCert, CompComp and our work.}\label{fig:compcomp-changes}
+\end{table}
+
+ Interaction Semantics was also a step towards separate compilation for CompCert, and the ability to link
+ with assembly language programs. To achieve fully modular separate compilation and linking,
+\emph{Compositional CompCert} (CompComp) \cite{compcomp}
+extended Interaction Semantics,
+strengthening CompCert's compiler
+correctness theorem with \emph{structured injections} that
+make the right ``contract'' between separately compiled modules.
+Unfortunately, this stronger theorem required substantial changes
+to the CompCert 2.1 correctness proof (\cref{fig:compcomp-changes}), so the CompCert
+maintainers declined to merge it into the master branch.  In our current work,
+where we focus on concurrency rather than separate compilation,
+we have found a lightweight modification to CompCert's
+correctness specification, that will be easy to integrate
+into the trunk and to maintain. Our new \emph{MOIST semantics} and \emph{simulations}, which stands for Memory-explicit, Observable, Injectable, Startable, Trace,  are closely related to Interaction Semantics and Logical Simulation Relations as we describe below.
+
+\paragraph{Memory.} Compositional CompCert (CompComp) requires that all intermediate languages use the same memory model. This homogeneity is useful to reason about the changes in memory produced by compilation. \emph{Core semantics} implicitly enforces the use of a unifying memory model by separating a program state into a tuple of a memory and a \emph{core}, where the type of the memory is consistent for the entire system but the core is language dependent. Then in CompComp's design we changed all type signatures in \compcert , to match this design decision: while the step relation in CompCert has type \Coqcode{genv -> state -> trace -> state -> Prop} in Compositional CompCert it has type \Coqcode{genv -> core -> mem -> trace -> core -> mem -> Prop}. 
+
+Our \textbf{M}OIST semantics has a similar requirement about memory, but we approach it in a more permissive way. We don't require CompCert's intermediate languages be refactored to syntactically separate corestate from memory; to minimize changes to CompCert's existing proofs we merely require a simple function (for each phase) to produce a memory from a state  with a function \Coqcode{get_mem: state -> mem}. This allows intermediate languages with richer notions of memory such as the juicy memory [1] or other kinds of abstract state in [5], as long as they can produce a  \Coqcode{get_mem}. 
+
+%%AT_EXTERNAL
+\paragraph{Observable.} By design, Core semantics \cite{compcomp} don't take a step when they call an external function; there is a function \Coqcode{at_external}  that describes such states and another \Coqcode{after_external} that reestablishes the state after the external function is executed (e.g. writes the result in the right place), but there is no step between the two. In essence, core semantics are precisely the small steps taken by the module/thread/core executing; the other steps are introduced after semantic linking. 
+
+We believe that this semantics is very useful for semantic linking (and we use core semantics to build our concurrent machine), but it is not the best model for compilation. To adapt compiler correctness to the core semantics, Stewart et al. \cite{compcomp} define logical simulation relations which are quite complicated for the  \Coqcode{at_external} and \Coqcode{after_external} cases. These relations form a rely-guarantee between callers and callees which become pretty complex when both are being compiled. Our MOIST simulations and semantics, together with our technique to Compile One At a Time (COAT, \autoref{sec:coat}), avoid that complexity.  
+
+Like Core semantics, M\textbf{O}IST semantics makes states that call external functions \textbf{o}bservable, as described by a function \Coqcode{at_external}; however, MOIST semantics still step from those states (where Core semantics prohibits a thread's state from stepping at an external call). Our semantics can take one single 'big step' representing the entire execution of the external call, just like \compcert. In essence, MOIST semantics represent the thread/module local \emph{view} of an execution, where internal steps are taken as small steps and external steps as big-step. This view is consistent with CompCert's semantics. 
+
+An important feature of MOIST semantics is that it requires no changes to the step relation of each intermediate language of CompCert; we only need to define \Coqcode{at_external} to observe the external calls and their arguments. In addition, we can derive a core semantics from a MOIST semantics, %\cprotect\footnote{To derive a core semantics from a MOIST semantics do the following: (1) construct the new states with \lstinline{fun st:state => (st, get_mem st) }, (2) derive a new step relation that doesn't step when it is \Coqcode{at\_external}, and (3) define an \Coqcode{after\_external}.  (1) and (2) are done automatically. } 
+but not the other way around. We use this transformation to derive core semantics for Clight and Assembly, which is what we use to build our concurrent machine.
+
+Moreover, MOIST simulations avoid having the complex relations for \Coqcode{at_external} and \Coqcode{after_external}; instead, we only need two clauses that say that (1) the compiler doesn't remove external function calls from executions and (2) the compiler can't change the number of steps taken by an external function call. This simplicity is enabled by the COAT technique (\autoref{sec:coat}), which allows us to model the context as external function calls, instead of parts of the program that are also compiling. 
+
+%STARTABLE
+\paragraph{Startable.} The MOI\textbf{S}T semantics' \Coqcode{entry_point} predicates are very similar to Compositional CompCert's \Coqcode{initial_core}, with two main difference. First, Compositional CompCert doesn't really pass arguments on the stack (which means that calls to \Ccode{main(argc,argv)} on x86-32 and other stack-based architectures are not modelled accurately). Interaction semantics \cite{bsda:esop2014} is designed to link any module of any language and, because different languages treat arguments differently, the authors decided to unify all semantics with an abstract calling convention. We avoid that idealization and provide concrete semantics for argument-passing, including passing arguments on the stack when calling external functions. Second, thanks to our COAT technique, the simulation diagram for initial states in MOIST simulations, is much simpler than the one in Logical Simulation Relations (as explained in \autoref{sec:compcert-sim})
+
+
+\subsection*{Lightweight separate compilation of CompCert}
+
+SepCompCert \cite{sepcomp} is another enhancement of \compcert\ that supports syntactic linking of modules compiled with the same compiler (i.e., CompCert). The SepCompCert framework does not use any notion of semantic linking and, in particular, does not have semantics for linking modules in different languages. However, the development of SepCompCert is significantly simpler than that of Compositional CompCert and has since been adopted by the developers of CompCert in the trunk. SepCompCert does not address concurrency; but its success in finding a solution to separate compilation with such lightweight changes to CompCert itself inspired us to find a solution to concurrency with lightweight changes to CompCert.
+
+
+\paragraph{External modules as internal steps.} Compositional CompComp and SepCompCert  have very different semantics for separately compiled modules. As we described above, the former uses interaction semantics for each module such that other modules are treated as external functions. Only the linker gives a whole-program semantics. The latter only supports syntactic linking, so the only semantics is that of the whole program. In this case, functions defined in other modules execute normally as internal steps and there is no need for interaction semantics. The upside of the second approach is that it allows to reuse most of CompCert's proofs. On the other hand, SepCompCert can't reason about modules compiled with other compilers, especially if the module is not written in C.  
+
+The present work is not about separately compiled modules but about synchronization libraries and threads running in parallel. However, we believe our MOIST semantics strikes a balance between the two approaches described above.  We treat the execution of the context as external functions, but we use CompCert's existing machinery for those. More precisely, MOIST semantics are thread-local views of the execution of the whole program, executing the context with ``big-step" semantics, just like CompCert treats external functions. This approach allows us to reuse most proofs in CompCert. On the other hand, we can also derive an interaction semantics from a MOIST one and we can ``link" them together in the Concurrent Permission Machine, to give precise small-step semantics for the whole program.
+
+\paragraph{Optimizations in RTL.} SepCompCert supports the linking of modules that have been compiled with different levels of optimization. Without a notion of semantic linking, the authors can only hope to achieve that if
+every "optional" optimization is from an intermediate language to the same intermediate language, and no new optimizations are added that introduce new intermediate languages. Fortunately, all optional optimizations in CompCert are done in the RTL language, but any future optimizations that break this rule will not be supported by SepCompCert. 
+
+We are working with threads and not separately compiled modules, however our COAT technique models compilation as if each thread were being compiled separately. Part of the process is to define Concurrent Permission Machines with threads in different languages (Hybrid Machines, \autoref{sec:coat}). Thanks to this multi-language semantics, we don't need to make any assumptions about optional optimizations. 

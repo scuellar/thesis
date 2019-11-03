@@ -1,6 +1,11 @@
-\chapter{Compiler Correctness \label{ch:compiler}}
+\chapter{Compiler Correctness}\label{ch:compiler}
 
-This chapter describes the compiler correctness proof and its implementation.
+In this chapter we present the compiler specification that supports concurrent code, and we show that CompCert satisfies this specification. Just as we did for MOIST semantics, the specification of correctness for CPMs is given as a simulation relation. As we explained in \cref{sec:topbottomdefs} this a simulation is enough to derive safety and correctness preservation. We start the proof by introducing our novel technique to support threads as if we could  \emph{Compile One At a Time} and then we show how to prove the simulation for the different steps in the CPM.
 
 \input{ch-compiler/compiler-theorem}
+\input{ch-compiler/compiler-COAT}
+\input{ch-compiler/compiler-self}
+\input{ch-compiler/compiler-admin}
+\input{ch-compiler/compiler-sync}
+\input{ch-compiler/compiler-proof}
 \input{ch-compiler/compiler-implementation}

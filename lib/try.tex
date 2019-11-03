@@ -1,0 +1,16 @@
+\documentclass{article}
+\usepackage{amsmath,amsfonts,amssymb,amsthm,bbm}
+\usepackage{hyperref}
+
+\newtheorem{theorem}{Theorem}[section] %restarts every section
+\begin{document}
+
+\begin{theorem}[Important Theorem]\label{important} this is the theorem
+\end{theorem}
+
+\begin{proof}[Proof of \autoref{important}] It's obvious.
+\end{proof}
+
+\begin{proof}[Proof of \hyperref[important]{Important Theorem} ] It's obvious. \end{proof}
+
+\end{document}

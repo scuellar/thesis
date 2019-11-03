@@ -1,3 +1,48 @@
 \section{Future Work}\label{ch:futurework}
 
-Lots to talk about here.
+
+
+
+\subsection{Short-term work}\label{sec:shortfuture}
+
+\paragraph{Removing statically checked properties.}  In \autoref{sec:coqmainthm} we use statically checked validation for some properties of the assembly language program. We know that all the properties in \lstinline{static_validation} can be derived from the CompCert compiler, but we leave these proofs for future work. 
+
+\paragraph{Relaxing full injections.} In \autoref{sec:fullinjections}, we explain why the current work assumes that simulations preserve \Coqcode{full_injection}. We propose to lift this restriction and support the compiler passes that break this assumption. 
+
+We need to enhance CompCert's specification of external functions, allowing them to modify only locations reachable from \emph{all} escaped addresses. All those escaped locations, can be kept in a history of arguments to external functions \Coqcode{args_hist}. Then we would prove that \Coqcode{args_hist} are not unmapped by SimplLocals or Unusedglob, since it only contains escaping pointers and these passes delete variables that don't escape and unused global variables. 
+
+There is one more wrinkle to supporting Unusedglob, that we can easily address in future work. The current Compile One At a Time (COAT) technique starts by compiling the first thread. However the first thread is the one that allocates the global variables, so if it deletes some of these global variables the self-simulation of other threads won't work. To solve this problem, we just have to observe that allocating more global variables is supported by self-simulation; we propose to extend the COAT technique to compile all threads beyond the second one and then compile the first thread last. This way, when the first thread is compiled, none of the other threads depend on the global variables that will be deleted. That should be enough to support Unusedglob.
+
+\paragraph{Simpler for separate compilation.} We suggested a new approach to separate compilation using our Compile One At a Time Technique, in \autoref{sec:coat}. We leave the Coq implementation and the connection to the present development for future work.
+
+\subsection{Long-term work}
+
+%%%Add separaed compilation
+%\paragraph{Concurrency and separated compilation. } We want to combine our CPM with a separated compilation model (such as the Linker in \cite{compcomp}), to support separated compilation and concurrency at the same time. We expect that the COAT technique, will make the two approaches
+
+%%%
+%WEAK SHYNCHRONISATIONS
+\paragraph{Support for fine-grained synchronizations.}
+We intend to extend the work to other synchronization models: atomic
+operations in the relaxed, release-acquire,
+and SC modes of C11.  We will model them as ``external calls'' in CompCert's
+model (even though the compiler may actually inline
+them  at the very end).  Because the sequential compiled code treats these atomics as external, adding these operations does not
+change the compiler in any way.  To handle SC atomics alone, the CPM
+could be extended with rules similar to those for locks, since an SC
+access to a location can be modeled by acquiring a lock on the
+location, changing its value, and then releasing the
+lock. Release-acquire and relaxed accesses will require storing
+additional information, such as histories of accesses and associated
+permission maps for each atomic location, using an approach analogous
+to Kaiser \emph{et al.}~\cite{Iris-weak} or Kang \emph{et al.}~\cite{Kang2017promising}.
+
+%The current presentation of the CPM is limited to sequentially consistent concurrency; 
+%however, we believe that it can be extended to support models such as the the promising semantics \cite{Kang2017promising}. To account for the different views of of memory, we can replace permission maps with partial views of memory (with memory content). We leave this for future work.
+
+\paragraph{Support for other builtins and external functions.}   
+Our framework can easily be extended to support silent external functions and builtins that don't communicate amongst threads. However, some system calls and external functions can be used to synchronize executions (e.g., treating a system call read/write as a lock) or to expose the order of execution (e.g., output that depends on the order of execution). To avoid races, the use of shared resources should be properly synchronized (e.g., using locks). We can extend our permissions to cover non-memory resources (such as external sensors) to avoid races. Such extension should be mirrored by a protocol in the Concurrent Separation Logic, that proves the correctness of other external functions and is sound with respect to this resource permissions. 
+
+\paragraph{Support for other source level logics.} Our semantics is general enough the we expect it to be compatible with other logics. We are particularly interested in exploring a connection to logics that support more relaxed atomics such as the logics of Kang \emph{et al.}~\cite{Kang2017promising} or IRIS \cite{jung2015iris}.
+
+\paragraph{Support for other architectures.} Our current development targets x86 TSO, particularly relying on Giannarakis's reduction theorem (\autoref{sec:weak}) for this architecture. We expect that similar reduction theorems exists for other architectures. 
