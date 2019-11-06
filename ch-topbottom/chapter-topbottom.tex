@@ -18,19 +18,19 @@ The structure of the entire project is as follows:
 
 
 \begin{enumerate}[leftmargin=\widthof{(Compiler)}+\labelsep, rightmargin=2cm] %Right margin looks pretty for small sentences. Remove if it gets longere.
-\item[(top)] Any C program, proven correct in Concurrent Separation Logic, runs correctly in the CPM. (Work by Madiot, Mansky, Appel)
-\item[(\textbf{Compiler})] The CompCert compiler preserves correctness of compiled programs with respect to the CPM semantics. (The contribution of this thesis)
-\item[(bottom)] Safe executions of the CPM, in the compiled program, run correctly on X86 machines. (Work by Giannarakis and Beringer)
+\item[(top)] Any C program, proven correct in Concurrent Separation Logic, runs correctly in the CPM. \thesisorreport{(Work by Madiot, Mansky, Appel)}{}
+\item[(\textbf{Compiler})] The CompCert compiler preserves correctness of compiled programs with respect to the CPM semantics. \thesisorreport{(The contribution of this thesis)}{}
+\item[(bottom)] Safe executions of the CPM, in the compiled program, run correctly on X86 machines. \thesisorreport{(Work by Giannarakis and Beringer)}{}
 \end{enumerate}
 
 Putting it all together, our main theorem is a top-to-bottom preservation of correctness,
 \begin{theorem}[Informal Main Theorem]\label{mainthm}
-A correct C program, compiled by CompCert, runs correctly in an X86 machine.
+A correct C program, compiled by CompCert, runs safely in an X86 machine.
 \end{theorem}
 
 In the result we present here, we go down as far as assembly language, not machine language; this is because no one has formalized the assembly-to-machine level of CompCert. The preservation of \emph{safety} we prove includes: no execution of undefined instructions or loading from inaccessible memory; no violations of the spinlock well-synchronized property. Owens \cite{owens10:ecoop} proved that a spinlock-well-synchronized execution behaves correctly on a TSO (total-store-order) weakly consistent multiprocessor; Giannarakis has generalized Owens's definition of spinlock-well-synchronized to a stronger property that ensures correct execution on other weakly consistent architecture (see \autoref{sec:weak}). Correctness means that any finite prefix of the trace of input-output communications satisfies a specification; the compiler is shown to preserve this traces (up to memory rearrangements by the compiler, \autoref{sec:compcert-mem}). In \autoref{sec:topbottomdefs} we formalize how this preservation of traces translates to correctness, but this has not yet been implemented in Coq.
 
-In the rest of this chapter, we will present the details of the main theorem and describe the CPM formally. In chapters \ref{sec:asm_proofs} and \ref{sec:CSLsound}, we describe the parts of the top-to-bottom proof that are not developed in this thesis. 
+In the rest of this chapter, we will present the details of the main theorem and describe the CPM formally. \thesisorreport{In chapters \ref{sec:asm_proofs} and \ref{sec:CSLsound}, we describe the parts of the top-to-bottom proof that are not developed in this thesis. The entire work has been made public in our tech report \techlink\ and authors who wish to cite the results described in chapters \ref{sec:asm_proofs} and \ref{sec:CSLsound} should cite that report rather than this thesis.}{} 
 
 \input{ch-topbottom/topbottom_theorem}
 \input{ch-topbottom/CPM}

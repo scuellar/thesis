@@ -4,7 +4,7 @@
 Podkopaev et al. \cite{Anton2017promising} have proven a compiler correct with respect to the \emph{promising semantics} of Kang et al. \cite{Kang2017promising}, which features a high-level relaxed model of memory. They compile down to ARMv8-POP and later to POWER, ARMv7 and ARMv8 \cite{Anton2019promising}. Their work focuses on the complexity of relaxed memory models, but does not reuse existing sequential compilers and has not been yet connected to a full optimizing compiler. We would be interested to explore a combination of our work, to leverage the existing CompCert compiler, and their work, to include other synchronization atomics.
 
 Dodds et al. \cite{Dodds18} developed an automatic checker for compiler optimizations that supports relaxed memory models. Our trace-preservation simulations mirror their denotation-preserving relation. However, they consider observations for all possible contexts while we only consider permission-coherent ones (\autoref{sec:cpmdefs}). In this way we can verify transformations of code that manipulates shared memory that they cannot.\cprotect{\footnote{For example, their tool cannot verify %\Ccode{store (x,l)} $\rightsquigarrow$ \Ccode{store (x,l); store (x,l)} or 
-\Ccode{store (x,l); l := load (x)} $\rightsquigarrow$ \Ccode{l := load (x); store (x,l)}.
+\Ccode{l := load (x)} $\rightsquigarrow$ \Ccode{l := load (x); store (x,l)}.
 }}
 
 %LLVM \cite{zhao2012}

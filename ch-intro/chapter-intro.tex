@@ -30,7 +30,7 @@ verification are done on on ``ordinary'' memory access, as if the program were s
 Atomic memory operations, where synchronization magic happens, should be 
 modularly separated to make reasoning easier.
 
-This thesis is part of a larger effort to reason about such programs,\todo{This is a test of the todos.} 
+This \thesisorreport{thesis is part of a larger effort}{work aims} to reason about such programs,\todo{This is a test of the todos.} 
 prove them correct  in the source code, compile them correctly and
 have them execute correctly in a realistic machine, what we call the 
 \emph{top-to-bottom correctness}. All of this, with modular proofs, connected in an entirely
@@ -58,7 +58,7 @@ and a formal instantiation of CompCert assembly languages such as x86 (in both 3
 %The development of item (1) below, was done in collaboration with the authors of items (a) and (b),
 %as listed there.
 
-\paragraph{Contributions of this thesis.}
+\paragraph{Contributions of this \thesisorreport{thesis}{work}.}
 \begin{enumerate}
 \item We formalize the \emph{Concurrent Permission Machine}, an
   operational model of execution of C, of assembly language, or any
@@ -87,30 +87,34 @@ and a formal instantiation of CompCert assembly languages such as x86 (in both 3
 	concurrency. The semantic model of CPMCompCert is the CPM, and is compatible with the 
 	other parts of the top-to-bottom proof (in Coq).    
 
+
+\thesisorreport{
+
 \end{enumerate}
+\paragraph{Other contributions of the top-to-bottom correctness work.}  My proof of compiler correctness for the CPM is strongly motivated by the work of my colleagues showing that, at the source level, Concurrent Separation Logic is sound with respect to the CPM; and at the machine-language level, the CPM is correct on multicore machines.  The entire work has been made public in our tech report \techlink\  
 
 
-\paragraph{Other contributions of the top-to-bottom correctness work.}  My proof of compiler correctness for the CPM is strongly motivated by the work of my colleagues showing that, at the source level, Concurrent Separation Logic is sound with respect to the CPM; and at the machine-language level, the CPM is correct on multicore machines.  
+\begin{enumerate}[(a)]}{}
 
-\begin{enumerate}
-
-\item[(a)] The Clight-instantiated CPM model is sufficiently expressive to
+\item The Clight-instantiated CPM model is sufficiently expressive to
   capture user-level reasoning principles, by giving (in Coq) a
   soundness proof for a modern concurrent separation logic (CSL) that
   supports first-class (dynamically creatable) threads and locks and
   ``ghost state'' that can express concurrency-interaction protocols.
   The CSL logic and its semantic model build on those of the Verified Software Toolchain (VST)~\cite{appel14:plcc}, a framework for proving correctness of C programs in Coq, and
   it is demonstrated that users can apply the CSL to their programs
-  using VST's existing proof automation system. The proof of CSL-to-CPM 
+  using VST's existing proof automation system. 
+\thesisorreport{The proof of CSL-to-CPM 
   was done by Jean-Marie Madiot, William Mansky, and Andrew W. Appel, 
-  inspired by earlier work by Hobor, Zappa Nardelli, and Appel \cite[aplas paper, hobor thesis].
+  inspired by earlier work by Hobor, Zappa Nardelli, and Appel \cite{hobor08:esop, hobor08:phd}}{}
   
-\item[(b)] Safety and correctness of a assembly-language CPM
+\item Safety and correctness of a assembly-language CPM
   execution entails similar properties for fine-grained interleaving,
   and any instruction-level interleaved execution of the program
   is well synchronized.  Therefore, all
   executions of the program on a machine with relaxed memory semantics
-  will have the same behavior as in the CPM. This proof (in Coq) was primarily developed by Nick Giannarakis with assistance from Lennart Beringer.
+  will have the same behavior as in the CPM. 
+\thesisorreport{This proof (in Coq) was primarily developed by Nick Giannarakis with assistance from Lennart Beringer.}{}
   
 \end{enumerate}
 

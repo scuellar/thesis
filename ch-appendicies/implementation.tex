@@ -2,7 +2,23 @@
 %To add latex comments:
 
 \lstset{numbers=left, stepnumber=1, firstnumber=last}
-This appendix contains the Coq implementation of a selected number of definitions, lemmas and proofs. It is intended as a companion for both the thesis (to fill in implementation details that are intersttin to the reader) and to the Coq code (to have more complete explanation of the code, than what fits in code comments).  The pieces of code are organized by the chapters as they are defined in the Thesis.  
+This appendix contains the Coq implementation of a selected number of definitions, lemmas and proofs. It is intended as a companion for both the \thesisorreport{thesis}{tech report} (to fill in implementation details that are intersttin to the reader) and to the Coq code (to have more complete explanation of the code, than what fits in code comments).  The pieces of code are organized by the chapters as they are defined in the \thesisorreport{thesis}{tech report}.  
+
+\section{Obtaining and compiling the Coq code}\label{sec:getcode}
+
+\paragraph{To obtain the code.} Clone \githublink\ into a local folder \Ccode{/VST} and switch to branch \githubbranch. If you want to follow along with the code here, switch to commit \githubcommit.
+
+\paragraph{To compile the code.} In the \Ccode{/VST} directory, make a file named   \Ccode{CONFIGURE} containing exactly the text:  
+
+\Ccode{COMPCERT=compcert_new}
+
+\noindent Then, navigate to the folder \Ccode{/VST}, and run 
+
+\Ccode{make concurrency}
+
+\noindent or, if you have a multicore computer, \Ccode{make concurrency -j}.
+
+
 
 \section{Useful definitions}\label{sec:usefuldefs}
 \subsubsection{Contains Thread}
@@ -105,7 +121,7 @@ two memories $m_1$, $m_2$,
 and the rest of the  states of each \Coqcode{cstate1} and \Coqcode{cstate2}. 
 
 \begin{lstlisting}[firstnumber=1]
-      Record concur_match hb (ocd: option compiler_index)(j:meminj)
+      Record concur_match hb (ocd: option compiler_index)(j: meminj)
               (cstate1: $HM_{\text{hb}}$) (m1: mem) 
               (cstate2: $HM_{\text{hb}+1}$) (m2: mem):=
 \end{lstlisting}     
@@ -115,7 +131,7 @@ and the rest of the  states of each \Coqcode{cstate1} and \Coqcode{cstate2}.
 \end{lstlisting}     
 \noindent As explained in \cref{sec:fullinjections}, we currently require that injections are full. This will be addressed in future work.
 \begin{lstlisting}
-          ; full_inj: Events.injection_full j m1 (* remove this when we prove permission transfer is preserved*)
+          ; full_inj: Events.injection_full j m1 (* to be removed *)
 \end{lstlisting}     
 \noindent Both states are compatible with the memory. The definition of \Coqcode{mem_compatible} is explained in \cref{sec:usefuldefs}
 \begin{lstlisting}
@@ -166,21 +182,21 @@ and the rest of the  states of each \Coqcode{cstate1} and \Coqcode{cstate2}.
 \noindent Finally, all threads are in a match relation from source to target. For $i>\text{hb}$ we use the match relation for Clight given by the self simulation by \cref{thm:selfsim} and, 
 similarly, for $i<\text{hb}$ we use the match relation for Assmebly given in \cref{thm:selfsim}. For $i=\text{hb}$, we use the match  relation given by the MOIST simulation of CompCert 
 \begin{lstlisting}
-          ; mtch_source: forall (i:nat), (i > hb) -> %nat ->
+          ; mtch_source: forall (i:nat), (i > hb) -> 
                 forall  (cnt1: i $\in$ cstate1) (cnt2: i $\in$ cstate2) Hlt1 Hlt2,
                   match_thread_source j (getThreadC cnt1)
 				     (@restrPermMap (getThreadR cnt1).1 m1 Hlt1)
 				     (getThreadC cnt2)
 				     (@restrPermMap (getThreadR cnt2).1 m2 Hlt2)
           ; mtch_target:
-              forall (i:nat), (i < hb) -> %nat ->
+              forall (i:nat), (i < hb) -> 
                 forall  (cnt1: i $\in$ cstate1) (cnt2: i $\in$ cstate2) Hlt1 Hlt2,
                   match_thread_target j (getThreadC cnt1)
 				     (@restrPermMap (getThreadR cnt1).1 m1 Hlt1)
 				     (getThreadC cnt2)
 				     (@restrPermMap (getThreadR cnt2).1 m2 Hlt2)       
 	; mtch_compiled:
-              forall (i:nat),  (i = hb) -> %nat ->
+              forall (i:nat),  (i = hb) -> 
                 forall  (cnt1: i $\in$ cstate1) (cnt2: i $\in$ cstate2) Hlt1 Hlt2,
                   match_thread_compiled ocd j (getThreadC cnt1)
 				     (@restrPermMap (getThreadR cnt1).1 m1 Hlt1)

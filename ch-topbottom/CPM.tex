@@ -690,5 +690,5 @@ such as VCC \cite{cohen09:tphols} or Iris~\cite{jung2015iris}.
 Regardless of the means used to verify the program, it can
 still be executed in the CPM: for each choice of lock, there exists a CPM execution that performs the appropriate permission transfer.
 
-The current presentation of the CPM is limited to sequentially consistent concurrency; 
-however, we believe that it can be extended to support models such as the promising semantics \cite{Kang2017promising}. To account for the different views of of memory, we can replace permission maps with partial views of memory (with memory content). We leave this for future work.
+The current presentation of the CPM is limited to Semaphores (coarse grain synchronization);
+however, we believe that it can be extended to support other C11 atomic operations in modes such as SC and release/acquire %models such as the promising semantics \cite{Kang2017promising}. To account for the different views of of memory, we can replace permission maps with partial views of memory (with memory content). We leave this for future work.

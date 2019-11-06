@@ -3,11 +3,13 @@
 
 %We will start with an informal overview of the main theorem, followed by a the formal definitions and then a presentation of the Coq implementation and technical details.
 
-In this subsection we will describe the main theorem of the top-to-bottom work. In the first part we introduce the formal definitions and state the theorem; in the second part, we describe the Coq implementations of the theorem and the technical details of the definitions. 
+In this subsection we will describe the main theorem of the top-to-bottom work. We present two top to bottom theorems for reservation of safety and preservation of correctness; the former is mechanized in Coq en the second is formally proven in the following subsection, but has not been mechanized as part of this \thesisorreport{thesis}{work}. We state the theorems in two parts in the first part we state the theorems and the proofs; in the second part, we describe the Coq implementations of the theorem and the technical details of the definitions. 
 
 \subsection{Formal definitions}\label{sec:topbottomdefs}
 
-\emph{Safety} includes: no execution of undefined instructions or loading from inaccessible memory; no violations of the spinlock well-synchronized property. Safety also includes partial correctness properties, such as, any finite prefix of the trace of input-output communications satisfies a specification.
+\subsubsection{Safety}
+
+The notion of \emph{safety} we preserve means no execution of undefined instructions or loading from inaccessible memory and no violations of the spinlock well-synchronized property.
 
 \begin{reptheorem}{mainthm}[Main Theorem]\hypertarget{mainthm-formal}{
 Given a source program $P$ satisfying a CSL specification $S$, and an
@@ -17,24 +19,25 @@ synchronized, and \emph{correct}---the data transmitted through lock
 acquire/release events conforms to the resource invariants of $S$.}
 \end{reptheorem}
 
+\begin{proof}[Proof of Main Theorem] The full proof has been mechanized and can be found in the accompanying Coq code. The rest of the \thesisorreport{thesis}{work} expands on the different parts of the proof.
+\end{proof}
 
 \subsubsection{Correctness}
 
-Threads communicate
-by releasing and acquiring locks that control access to
+Each part of the top-to-bottom proof (i.e., CSL soundness, compiler correctness and well-synchronization proof) is stronger than preservation of safety and, as we show here, can be composed to show a preservation of correctness. The proof presented below is not mechanized as part of this \thesisorreport{thesis}{work} and is left as future work.
+
+Threads communicate by releasing and acquiring locks that control access to
 data regions.  In terms of Concurrent Separation Logic, we say
-a program is \emph{correct} if
-the data in such regions always
+a program is \emph{correct} if the data in such regions always
 satisfies an appropriate predicate---the \emph{resource invariant}---when
-the corresponding
-locks are released.
+the corresponding locks are released.
 Therefore, any \emph{observer} of the program---a thread who communicates with
 it by acquiring and releasing locks---will see only output
 that satisfies this correctness specification.
 Because our CSL has the appropriate partial-commutative-monoid ghost variables
 \cite{jung2015iris}, resource invariants
 can specify general protocol-correctness properties
-and not just safety.
+and not just safety. 
 
 We summarize a thread's output
 by monitoring the data controlled by locks as they are released,
@@ -43,10 +46,25 @@ The event trace of locks acquired/released, and the contents of memory
 transferred by those locks, we preserve all the way from the
 top level (CSL) to the bottom level (assembly) 
 so that we can state correctness properties of
-the assembly-language execution.
+the assembly-language execution. 
+We pay particular attention to those global locks defined at the beginning of the program, 
+since their invariants are explicit in the precondition of \Ccode{main} (and thus in the specification of the program).s
 
-We have not yet formalized in Coq, this notion of preservation of specifications.
+\begin{theorem}[Correctness preservation]
+Let $P, S$ and $Q$ be given as in \cref{mainthm}. For any trace prefix $T_Q$ of an execution of $Q$, there is an execution of $P$ with trace $T_P$, which is equal up to some injection ($T_P \injarrow{j} T_Q$). In particular, any integer values transferred by releasing locks are equal in both programs.
 
+Moreover, for every lock $l$, defined in the precondition of main (in $S$) with some invariant $R$, every time $l$ is realeased (in $T_P$ and $T_Q$), the transferred resources satisfy $R$.
+\end{theorem}
+
+\begin{proof}
+We look at how every part of the top-to-bottom work preserves traces (up to injection). 
+
+The instruction interleaving proof in \cref{sec:fine} constructs a new coarse-grain schedule and a new execution but  preserves all synchronization operation in the same order. The transferred resources of each synchronization oparation are also the same up to some reordering of memory. 
+
+The CPM simulations \cref{def:cpmsim}, given by the the compile correctness specification, preserve synchronization operation in the same order and the transferred resources are equal up to the injection given by compilation.
+
+The CSL proof, that $P$ satisfies $S$, includes proving that every lock release satisfies the invariant of the lock. For any lock defined in the precondition of \main\ that invariant is exactly the one in $S$.
+\end{proof}
 
 \subsection{Coq definitions}\label{sec:coqmainthm}
 

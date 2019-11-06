@@ -1,4 +1,9 @@
-\chapter[CSL soundness proof]{CSL soundness proof\footnote{It is unusual in a PhD thesis to have an entire chapter authored by someone else.  In this case, my own contribution---compiler correctness for concurrent CompCert based on the CPM---is motivated by and is useful in the context of the ability to prove that a source program has a safe execution in the CPM.  These results, by Madiot, Mansky and Appel, have not yet been published elsewhere.  In order to demonstrate that my own results can integrate into a top-to-bottom verified system, I include the work of those authors here, with their permission. In this chapter, only this footnote and the last section (\ref{sec:erasure}) are my own work; everything else is by the authors mentioned above.}}
+\chapter[CSL soundness proof]{CSL soundness proof
+\ifdefined\techreport
+\else
+\footnote{It is unusual in a PhD thesis to have an entire chapter authored by someone else.  In this case, my own contribution---compiler correctness for concurrent CompCert based on the CPM---is motivated by and is useful in the context of the ability to prove that a source program has a safe execution in the CPM.  These results, by Madiot, Mansky and Appel, have not yet been published elsewhere.  In order to demonstrate that my own results can integrate into a top-to-bottom verified system, I include the work of those authors here, with their permission. In this chapter, only this footnote and the last section (\ref{sec:erasure}) are my own work; everything else is by the authors mentioned above. This chapter is taken from our tech report \techlink\ and authors who wish to cite the results described in this chapter should cite that report rather than this thesis.
+ }
+\fi}
 \label{sec:CSLsound}
 
  
@@ -7,7 +12,7 @@ This section describes how the Concurrent Permission Machine supports a rich log
 A key idea in this process is to define the Juicy Concurrent Machine, which mirrors the CPM but with "juicy" memories and resources instead of CompCert memories and permission maps.
 We start with an overview of CSL, then "juicy" semantics for sequential code and concurrent code (Juicy Concurrent Machine). Finally we show that the CPM simulates the Juicy permission Machine, by erasing the juicy resources into regular permission.
 
-The work in sections \ref{sec:csl}, \ref{sec:juicyseq} and \ref{sec:juicyconc} where developed and written by Jean-Marie Madiot and William Mansky with assistance from Andrew Appel. The erasure proof in section \ref{sec:erasure} was done by the author of this thesis in collaboration with William Mansky.
+\thesisorreport{The work in sections \ref{sec:csl}, \ref{sec:juicyseq} and \ref{sec:juicyconc} where developed and written by Jean-Marie Madiot and William Mansky with assistance from Andrew Appel. The erasure proof in section \ref{sec:erasure} was done by the author of this thesis in collaboration with William Mansky.}{}
 
 
 \section{Concurrent Separation Logic}

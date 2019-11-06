@@ -45,6 +45,26 @@
               % used
 \modifyoutput
 
+%To make into a tech report (thesis) uncomment (comment) the following line:
+%\newcommand{\techreport}{}
+
+%The following command allows to provide two versions of a text,
+% depending on thesis or tech report. Useful to change "I" into "we" and so on.  
+\newcommand{\thesisorreport}[2]{%
+\ifdefined\techreport%
+#2%
+\else%
+#1%
+\fi%
+}
+
+
+%Variables
+\newcommand{\githublink}{\url{https://github.com/PrincetonUniversity/VST}}
+\newcommand{\githubbranch}{\emph{new\_stutter}}
+\newcommand{\githubcommit}{b1d968be5e009af5fa95429f85e52de30634ff2f}
+\newcommand{\techlink}{\cite{TECHREPORT}}
+
 
 % define "\proquestmode"  to use outlined links, instead of colored
 % links.
@@ -54,7 +74,11 @@
 % @PROQUESTMODE_CTRL@ \newcommand{\proquestmode}{}
 
 % @DRAFTMODE_CTRL@ \providecommand{\maybefrontmatter}{}
+\ifdefined\techreport
+\providecommand{\maybefrontmatter}{\techreportfront}
+\else
 \providecommand{\maybefrontmatter}{\makefrontmatter}
+\fi
 
 \fixupmargins
 
@@ -72,15 +96,33 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\
 %%%% Author & title page info
 
+\ifdefined\techreport  %The authors of the tech report
+\title{Compiler Correctness for Concurrency: from concurrent separation logic to shared-memory assembly language}
+\usepackage{authblk}
+\author{Santiago Cuellar}
+\author{Nick Giannarakis}
+\author[1,2]{Jean-Marie Madiot}
+\author[1,3]{William Mansky}
+\author{Lennart Beringer}
+\author[1,4]{Qinxiang Cao}
+\author{Andrew W. Appel}
+\affil[1]{Princeton University}
+\affil[2]{Currently at INRIA Paris}
+\affil[3]{Currently at University of Illinois}
+\affil[4]{Currently at Shanghai Jiao Tong University}
+\else
 \title{ Concurrent Permission Machine for modular proofs of optimizing compilers 
 with shared memory concurrency. }
 
 \submitted{subm. Date}  % degree conferral date (January, April, June, September, or November)
 \copyrightyear{tbd copyright}  % year in which the copyright is secured by publication of the dissertation.
+
 \author{Santiago Cuellar}
+
 \adviser{Andrew Appel}  %replace with the full name of your adviser
 %\departmentprefix{Program in}  % defaults to "Department of", but programs need to change this.
 \department{Computer Science}
+\fi
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\
 %%%% Tweak float placements
@@ -332,7 +374,7 @@ with shared memory concurrency. }
 %\includeonly{chap1,chap2,chap3}
 %\includeonly{ch-compcert/chapter-compcert}
 %\includeonly{ch-pastwork/chapter-pastwork}
-%\includeonly{ch-topbottom/chapter-topbottom}
+\includeonly{ch-topbottom/chapter-topbottom}
 %\includeonly{ch-compiler/chapter-compiler,ch-conclusion/chapter-conclusion}
 %\includeonly{ch-intro/chapter-intro, ch-pastwork/chapter-pastwork, ch-topbottom/chapter-topbottom}
 %\includeonly{ch-intro/chapter-intro, ch-pastwork/chapter-pastwork, ch-topbottom/chapter-topbottom,ch-otherparts/chapter-otherparts,ch-compcert/chapter-compcert}
@@ -362,11 +404,11 @@ with shared memory concurrency. }
 \include{ch-intro/chapter-intro}
 \include{ch-pastwork/chapter-pastwork}
 \include{ch-topbottom/chapter-topbottom}
-\include{ch-CSLsound/chapter-CSLsound}
-\include{ch-ASMproofs/chapter-ASMproofs}
 %\include{ch-otherparts/chapter-otherparts} %Old replaced by CSLsound + ASMproofs
 \include{ch-compcert/chapter-compcert}
 \include{ch-compiler/chapter-compiler}
+\include{ch-CSLsound/chapter-CSLsound}
+\include{ch-ASMproofs/chapter-ASMproofs}
 \include{ch-conclusion/chapter-conclusion}
 \appendix % all chapters following will be labeled as appendices
 \include{ch-appendicies/implementation}

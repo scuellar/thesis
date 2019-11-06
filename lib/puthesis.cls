@@ -205,6 +205,41 @@
 \long\def\abstract#1{\gdef\@abstract{#1}}
 %% 'begincmd' no longer used -- insert \makefrontmatter in the document instead. See above.
 %\AtBeginDocument{\begincmd}
+
+
+
+%%% Santiago: adding a case for the technical report:
+
+%%We define the title of the tech report
+\newcommand{\maketachtitle}{{
+  \thispagestyle{empty}
+  \sc
+  \vspace*{0in}
+  \begin{center}
+    \LARGE \@title
+  \end{center}
+  \vspace{.6in}
+  \extravspace{.6in}
+  \begin{center}
+    \@author
+  \end{center}
+  \vspace{.6in}
+  \extravspace{.6in}
+  \begin{center}
+    Draft Tech Report. Do not distribute. 
+  \end{center}
+  \clearpage
+  }}
+
+\newcommand*{\techreportfront}{
+\bodyspacing
+\frontmatter\maketachtitle\makeabstract
+%\maketoc
+%\makelot\clearpage\makelof\clearpage\makelos
+\clearpage\mainmatter
+}
+
 \endinput
 %%
 %% End of file `puthesis.cls'.
+

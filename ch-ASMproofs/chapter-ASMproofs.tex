@@ -1,5 +1,10 @@
 \chapter[Instruction interleaving and well synchronization]{Instruction interleaving and well synchronization
-\footnote{It is unusual in a PhD thesis to have an entire chapter authored by someone else.  In this case, my own contribution---compiler correctness for concurrent CompCert based on the CPM---is motivated by and is useful in the context of the proof that safe assembly-language executions in the CPM are correct on weakly consistent multiprocessors. These results, by Giannarakis and Beringer, have not yet been published elsewhere.  In order to demonstrate that my own results can integrate into a top-to-bottom verified system, I include the work of those authors here, with their permission. In this chapter, everything besides this footnote is written by the authors mentioned above. }
+\ifdefined\techreport
+\else
+\footnote{It is unusual in a PhD thesis to have an entire chapter authored by someone else.  In this case, my own contribution---compiler correctness for concurrent CompCert based on the CPM---is motivated by and is useful in the context of the proof that safe assembly-language executions in the CPM are correct on weakly consistent multiprocessors. These results, by Giannarakis and Beringer, have not yet been published elsewhere.  In order to demonstrate that my own results can integrate into a top-to-bottom verified system, I include the work of those authors here, with their permission. In this chapter, everything besides this footnote is written by the authors mentioned above. 
+This chapter is taken from our tech report \techlink\ and authors who wish to cite the results described in this chapter should cite that report rather than this thesis.
+}
+\fi
 }
 \label{sec:asm_proofs}
 
